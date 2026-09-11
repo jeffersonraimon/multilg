@@ -1,0 +1,15 @@
+services:
+  multilg:
+    build: .
+    container_name: multilg-client
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      LG_SECRET_KEY: ${LG_SECRET_KEY:-troque-esta-chave-antes-de-usar-em-producao}
+      LG_DATABASE_PATH: /data/multilg.db
+      LG_QUERY_CONCURRENCY: ${LG_QUERY_CONCURRENCY:-10}
+      LG_DEFAULT_TIMEOUT: ${LG_DEFAULT_TIMEOUT:-20}
+    volumes:
+      - ./data:/data
+
