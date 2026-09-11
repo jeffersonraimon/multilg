@@ -13,7 +13,7 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 - Configuração HTTP genérica para requisições GET e POST, respostas em texto ou JSON e extração por regex.
 - Sessões Telnet com autenticação opcional, prompts configuráveis e pré-comandos.
 - Comandos Telnet IPv4 e IPv6 separados quando o equipamento exigir sintaxes diferentes.
-- Opção para desativar a paginação em equipamentos Cisco, FRR e RouteViews.
+- Opções para desativar a paginação em equipamentos Cisco/FRR/RouteViews e Juniper/Junos.
 
 ## Subir com Docker
 
@@ -68,7 +68,12 @@ Exemplo com comandos separados:
 
 Os prompts são expressões regulares. O padrão final `[>#]\s*$` atende CLIs comuns, mas deve ser ajustado ao LG real.
 
-Em Cisco, FRR e RouteViews, marque **Desativar paginação** para executar `terminal length 0` antes da consulta e evitar que a saída pare em `--More--`. Para outras CLIs, use o campo **Outros pré-comandos**, um comando por linha.
+Em **Desativar paginação**, escolha o perfil compatível com a CLI:
+
+- Cisco, FRR e RouteViews: `terminal length 0` para saídas que param em `--More--`.
+- Juniper e Junos: `set cli screen-length 0` para saídas que param em `---(more)---`.
+
+Para outras CLIs, use o campo **Outros pré-comandos**, um comando por linha.
 
 Se o host abrir diretamente no prompt final mesmo com credenciais cadastradas, o conector detecta esse prompt e continua sem tentar autenticar. Mensagens de timeout indicam a etapa que não terminou, como conexão, autenticação, pré-comando ou comando principal.
 

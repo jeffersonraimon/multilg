@@ -30,7 +30,12 @@ type QueryStreamEvent =
   | { type: "result"; result: QueryResult }
   | { type: "complete"; duration_ms: number };
 
-const DISABLE_PAGING_COMMAND = "terminal length 0";
+const PAGING_PRESETS = [
+  { value: "", label: "Não alterar" },
+  { value: "terminal length 0", label: "Cisco / FRR / RouteViews — terminal length 0" },
+  { value: "set cli screen-length 0", label: "Juniper / Junos — set cli screen-length 0" },
+] as const;
+const PAGING_COMMANDS = new Set<string>(PAGING_PRESETS.map(option => option.value).filter(Boolean));
 const TARGET_HISTORY_KEY = "multilg.recent-targets";
 const TARGET_HISTORY_LIMIT = 8;
 const RESULTS_PER_PAGE = 4;
@@ -107,7 +112,7 @@ const initialForm = () => ({
   telnet: {
     host: "", port: 23, username: "", password: "",
     username_prompt: "(?i)(login|username)[: ]*$", password_prompt: "(?i)password[: ]*$",
-    prompt_regex: "[>#]\\s*$", pre_commands: [] as string[], pre_commands_text: "", disable_paging: false,
+    prompt_regex: "[>#]\\s*$", pre_commands: [] as string[], pre_commands_text: "", paging_command: "",
     commands: {} as Partial<Record<Operation, string>>,
     commands_v6: {} as Partial<Record<Operation, string>>, quit_command: "exit", timeout: 20,
   },
@@ -312,8 +317,8 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
           telnet: {
             ...item.config,
             commands_v6: item.config.commands_v6 || {},
-            pre_commands_text: (item.config.pre_commands || []).filter((command: string) => command !== DISABLE_PAGING_COMMAND).join("\n"),
-            disable_paging: (item.config.pre_commands || []).includes(DISABLE_PAGING_COMMAND),
+            pre_commands_text: (item.config.pre_commands || []).filter((command: string) => !PAGING_COMMANDS.has(command)).join("\n"),
+            paging_command: (item.config.pre_commands || []).find((command: string) => PAGING_COMMANDS.has(command)) || "",
           },
         };
   });
@@ -343,10 +348,6 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
       },
     },
   }));
-  const toggleTelnetPaging = () => setForm((prev: any) => ({
-    ...prev,
-    telnet: { ...prev.telnet, disable_paging: !prev.telnet.disable_paging },
-  }));
   const parseJson = (value: string, label: string) => { try { return value.trim() ? JSON.parse(value) : {}; } catch { throw new Error(`${label} deve ser um JSON válido`); } };
 
   const save = async (event: FormEvent) => {
@@ -373,12 +374,12 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
         const commandsV6: Record<string, string> = {};
         for (const op of ops) if (form.telnet.commands[op] !== undefined) commands[op] = form.telnet.commands[op]!;
         for (const op of ops) if (form.telnet.commands_v6[op] !== undefined) commandsV6[op] = form.telnet.commands_v6[op]!;
-        const { pre_commands_text, disable_paging, has_password: _has_password, commands_v6: _commands_v6, ...telnet } = form.telnet;
+        const { pre_commands_text, paging_command, has_password: _has_password, commands_v6: _commands_v6, ...telnet } = form.telnet;
         config = {
           ...telnet,
           pre_commands: [
-            ...(disable_paging ? [DISABLE_PAGING_COMMAND] : []),
-            ...parsePreCommands(pre_commands_text).filter(command => command !== DISABLE_PAGING_COMMAND),
+            ...(paging_command ? [paging_command] : []),
+            ...parsePreCommands(pre_commands_text).filter(command => command !== paging_command),
           ],
           commands,
           commands_v6: commandsV6,
@@ -421,7 +422,7 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
       </> : <>
         <div className="form-grid three"><label><span>Host</span><input required value={form.telnet.host} onChange={e => setForm({ ...form, telnet: { ...form.telnet, host: e.target.value } })} placeholder="lg.exemplo.net"/></label><label><span>Porta</span><input type="number" min="1" max="65535" value={form.telnet.port} onChange={e => setForm({ ...form, telnet: { ...form.telnet, port: +e.target.value } })}/></label><label><span>Timeout</span><input type="number" min="2" max="120" value={form.telnet.timeout} onChange={e => setForm({ ...form, telnet: { ...form.telnet, timeout: +e.target.value } })}/></label></div>
         <div className="form-grid two"><label><span>Usuário (opcional)</span><input value={form.telnet.username} onChange={e => setForm({ ...form, telnet: { ...form.telnet, username: e.target.value } })}/></label><label><span>Senha {form.telnet.has_password ? "(deixe vazio para manter)" : "(opcional)"}</span><input type="password" value={form.telnet.password} onChange={e => setForm({ ...form, telnet: { ...form.telnet, password: e.target.value } })}/></label><label><span>Regex do prompt de usuário</span><input value={form.telnet.username_prompt} onChange={e => setForm({ ...form, telnet: { ...form.telnet, username_prompt: e.target.value } })}/></label><label><span>Regex do prompt de senha</span><input value={form.telnet.password_prompt} onChange={e => setForm({ ...form, telnet: { ...form.telnet, password_prompt: e.target.value } })}/></label><label><span>Regex do prompt final</span><input value={form.telnet.prompt_regex} onChange={e => setForm({ ...form, telnet: { ...form.telnet, prompt_regex: e.target.value } })}/></label><label><span>Outros pré-comandos (um por linha)</span><textarea value={form.telnet.pre_commands_text || ""} onChange={e => setForm({ ...form, telnet: { ...form.telnet, pre_commands_text: e.target.value } })} placeholder="terminal width 0"/></label></div>
-        <label className="telnet-option"><input type="checkbox" checked={Boolean(form.telnet.disable_paging)} onChange={toggleTelnetPaging}/><span><strong>Desativar paginação</strong><small>Executa <code>terminal length 0</code> antes da consulta. Use em RouteViews, Cisco e FRR quando a saída parar em <code>--More--</code>.</small></span></label>
+        <label className="pagination-option"><span>Desativar paginação</span><div className="select-wrap"><select value={form.telnet.paging_command || ""} onChange={e => setForm({ ...form, telnet: { ...form.telnet, paging_command: e.target.value } })}>{PAGING_PRESETS.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select><ChevronDown size={16}/></div><small>Escolha conforme a CLI quando a saída parar em <code>--More--</code> ou <code>---(more)---</code>.</small></label>
         <OperationEditor ops={ops} configured={form.telnet.commands} onToggle={toggleTelnetOp}>{op => <div className="operation-fields">
           <label><span>Comando IPv4 / padrão — use <code>{'{target}'}</code></span><input required value={form.telnet.commands[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, telnet: { ...prev.telnet, commands: { ...prev.telnet.commands, [op]: e.target.value } } }))} placeholder={op === "ping" ? "ping {target} count 5" : op === "traceroute" ? "traceroute {target}" : "show bgp ipv4 unicast {target}"}/></label>
           <button type="button" className={`v6-command-toggle ${form.telnet.commands_v6[op] !== undefined ? "enabled" : ""}`} onClick={() => toggleTelnetV6(op)}>{form.telnet.commands_v6[op] !== undefined ? <Check size={15}/> : <Plus size={15}/>} {form.telnet.commands_v6[op] !== undefined ? "Comando IPv6 habilitado" : "Usar comando IPv6 diferente"}</button>
