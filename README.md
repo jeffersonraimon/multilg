@@ -7,6 +7,7 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 - Consulta paralela em múltiplos Looking Glass.
 - Resultados progressivos: cada LG aparece assim que termina, sem aguardar os demais, e traceroutes Telnet exibem os saltos em tempo real.
 - Exibição de até quatro resultados por página, com navegação anterior/próxima.
+- Cancelamento imediato da consulta, preservando a saída parcial, e limpeza dos resultados exibidos.
 - Filtro automático dos LGs conforme a operação selecionada: BGP, ping ou traceroute.
 - Duplicação de LGs existentes para reaproveitar configurações com segurança.
 - Histórico local dos oito últimos IPs ou prefixos consultados, com atalhos e opção para limpar.

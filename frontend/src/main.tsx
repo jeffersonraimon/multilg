@@ -22,7 +22,7 @@ type LookingGlass = {
 };
 type QueryResult = {
   looking_glass_id: string; looking_glass_name: string; protocol: Protocol;
-  status: "success" | "error" | "unsupported"; output: string; duration_ms: number;
+  status: "success" | "error" | "unsupported" | "cancelled"; output: string; duration_ms: number;
 };
 type BatchResult = { target: string; operation: Operation; duration_ms: number; total: number; results: QueryResult[] };
 type QueryStreamEvent =
@@ -135,6 +135,8 @@ function App() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<LookingGlass | null>(null);
+  const queryAbortRef = useRef<AbortController | null>(null);
+  const queryStartedAtRef = useRef(0);
 
   const loadItems = async () => {
     try {
@@ -174,12 +176,47 @@ function App() {
     setRecentTargets([]);
   };
 
+  const cancelQuery = () => {
+    queryAbortRef.current?.abort();
+    const duration = Math.round(performance.now() - queryStartedAtRef.current);
+    setResult(previous => {
+      if (!previous) return previous;
+      const completed = new Set(previous.results.map(item => item.looking_glass_id));
+      const cancelled: QueryResult[] = queryIds.filter(id => !completed.has(id)).map(id => {
+        const source = items.find(item => item.id === id);
+        const partial = partialOutputs[id];
+        return {
+          looking_glass_id: id,
+          looking_glass_name: source?.name || "Looking Glass",
+          protocol: source?.protocol || "telnet",
+          status: "cancelled",
+          output: partial ? `${partial}\n\n[Consulta cancelada pelo usuário]` : "Consulta cancelada pelo usuário.",
+          duration_ms: duration,
+        };
+      });
+      return { ...previous, duration_ms: duration, results: [...previous.results, ...cancelled] };
+    });
+    setPartialOutputs({});
+    setRunning(false);
+  };
+
+  const clearResults = () => {
+    setResult(null);
+    setQueryIds([]);
+    setPartialOutputs({});
+    setResultPage(0);
+    setError("");
+  };
+
   const run = async (event: FormEvent) => {
     event.preventDefault();
     const selectedIds = availableItems.filter(item => selected.has(item.id)).map(item => item.id);
     const started = performance.now();
+    const controller = new AbortController();
     let receivedResults = 0;
     const streamedOutputs: Record<string, string> = {};
+    queryAbortRef.current = controller;
+    queryStartedAtRef.current = started;
     setError("");
     setRunning(true);
     setQueryIds(selectedIds);
@@ -189,7 +226,7 @@ function App() {
     try {
       await streamApi(
         "/api/query/stream",
-        { method: "POST", body: JSON.stringify({ target, operation, looking_glass_ids: selectedIds }) },
+        { method: "POST", body: JSON.stringify({ target, operation, looking_glass_ids: selectedIds }), signal: controller.signal },
         event => {
           if (event.type === "start") {
             setQueryIds(event.looking_glass_ids);
@@ -231,10 +268,15 @@ function App() {
         },
       );
     } catch (e) {
-      setError((e as Error).message);
-      if (!receivedResults) setResult(null);
+      if ((e as Error).name !== "AbortError") {
+        setError((e as Error).message);
+        if (!receivedResults) setResult(null);
+      }
     }
-    finally { setRunning(false); }
+    finally {
+      if (queryAbortRef.current === controller) queryAbortRef.current = null;
+      setRunning(false);
+    }
   };
 
   const remove = async (item: LookingGlass) => {
@@ -278,7 +320,7 @@ function App() {
           </div>
           <div className="query-row">
             <label><span>IP ou prefixo</span><div className="input-with-icon"><Globe2 size={19}/><input value={target} onChange={e => setTarget(e.target.value)} placeholder={operation === "bgp" ? "1.1.1.0/24 ou 2001:db8::/32" : "8.8.8.8"} required autoFocus/></div></label>
-            <button className="run-button" disabled={running || !supportedCount}>{running ? <Loader2 className="spin" size={19}/> : <Search size={19}/>} {running ? "Consultando..." : `Consultar ${supportedCount} LG${supportedCount === 1 ? "" : "s"}`}</button>
+            <div className="query-actions">{running && <button type="button" className="cancel-query" onClick={cancelQuery}><X size={18}/> Cancelar</button>}<button className="run-button" disabled={running || !supportedCount}>{running ? <Loader2 className="spin" size={19}/> : <Search size={19}/>} {running ? "Consultando..." : `Consultar ${supportedCount} LG${supportedCount === 1 ? "" : "s"}`}</button></div>
           </div>
           {recentTargets.length > 0 && <div className="target-history"><span><Clock3 size={13}/> Recentes</span><div>{recentTargets.map(value => <button type="button" className={target === value ? "selected" : ""} onClick={() => setTarget(value)} key={value}>{value}</button>)}</div><button type="button" className="clear-history" onClick={clearTargetHistory}>Limpar</button></div>}
           <div className="targets-head"><button type="button" className="link-button" disabled={!availableItems.length} onClick={toggleAll}>{allAvailableSelected ? "Limpar seleção" : "Selecionar todos"}</button><span>{supportedCount} de {availableItems.length} {availableItems.length === 1 ? "disponível" : "disponíveis"} selecionado{supportedCount === 1 ? "" : "s"}</span></div>
@@ -289,7 +331,7 @@ function App() {
 
         {!result && !running && <div className="blank-state"><div className="radar"><span/><span/><span/><i/></div><h2>Uma consulta, várias perspectivas</h2><p>Escolha as fontes acima para executar a consulta em paralelo.</p></div>}
         {result && <div className="results-section">
-          <div className="results-summary"><div><strong>{result.results.length}/{result.total}</strong><span>LGs finalizados · {result.results.filter(r => r.status === "success").length} com sucesso</span></div><div><Clock3 size={16}/><span>{result.duration_ms} ms {running ? "decorridos" : "no total"}</span></div></div>
+          <div className="results-summary"><div><strong>{result.results.length}/{result.total}</strong><span>LGs finalizados · {result.results.filter(r => r.status === "success").length} com sucesso</span></div><div><Clock3 size={16}/><span>{result.duration_ms} ms {running ? "decorridos" : "no total"}</span>{!running && <button type="button" className="clear-results" onClick={clearResults}><Trash2 size={14}/> Limpar resultados</button>}</div></div>
           <div className="results-grid">{queryIds.slice(resultPage * RESULTS_PER_PAGE, (resultPage + 1) * RESULTS_PER_PAGE).map(id => {
             const item = result.results.find(candidate => candidate.looking_glass_id === id);
             const source = items.find(candidate => candidate.id === id);
@@ -316,7 +358,7 @@ function ResultCard({ item }: { item: QueryResult }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => { await navigator.clipboard.writeText(item.output); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   return <article className={`result-card ${item.status}`}>
-    <header><div className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={15}/> : <Terminal size={15}/>}</div><div><h3>{item.looking_glass_name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className={`result-status ${item.status}`}>{item.status === "success" ? "Concluído" : item.status === "unsupported" ? "Não suportado" : "Erro"}</span><span className="duration">{item.duration_ms} ms</span><button className="copy" onClick={copy}>{copied ? <Check size={16}/> : <Copy size={16}/>}</button></header>
+    <header><div className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={15}/> : <Terminal size={15}/>}</div><div><h3>{item.looking_glass_name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className={`result-status ${item.status}`}>{item.status === "success" ? "Concluído" : item.status === "unsupported" ? "Não suportado" : item.status === "cancelled" ? "Cancelado" : "Erro"}</span><span className="duration">{item.duration_ms} ms</span><button className="copy" onClick={copy}>{copied ? <Check size={16}/> : <Copy size={16}/>}</button></header>
     <pre>{item.output}</pre>
   </article>;
 }
