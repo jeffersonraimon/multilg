@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity, ArrowLeftRight, Check, ChevronDown, CircleAlert, Clock3,
@@ -27,6 +27,7 @@ type QueryResult = {
 type BatchResult = { target: string; operation: Operation; duration_ms: number; total: number; results: QueryResult[] };
 type QueryStreamEvent =
   | { type: "start"; target: string; operation: Operation; looking_glass_ids: string[]; total: number }
+  | { type: "partial"; looking_glass_id: string; output: string }
   | { type: "result"; result: QueryResult }
   | { type: "complete"; duration_ms: number };
 
@@ -128,6 +129,7 @@ function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<BatchResult | null>(null);
   const [queryIds, setQueryIds] = useState<string[]>([]);
+  const [partialOutputs, setPartialOutputs] = useState<Record<string, string>>({});
   const [resultPage, setResultPage] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -177,9 +179,11 @@ function App() {
     const selectedIds = availableItems.filter(item => selected.has(item.id)).map(item => item.id);
     const started = performance.now();
     let receivedResults = 0;
+    const streamedOutputs: Record<string, string> = {};
     setError("");
     setRunning(true);
     setQueryIds(selectedIds);
+    setPartialOutputs({});
     setResultPage(0);
     setResult({ target, operation, duration_ms: 0, total: selectedIds.length, results: [] });
     try {
@@ -198,12 +202,28 @@ function App() {
               total: event.total,
               results: previous?.results || [],
             }));
-          } else if (event.type === "result") {
-            receivedResults += 1;
+          } else if (event.type === "partial") {
+            streamedOutputs[event.looking_glass_id] = event.output;
+            setPartialOutputs(previous => ({ ...previous, [event.looking_glass_id]: event.output }));
             setResult(previous => previous ? {
               ...previous,
               duration_ms: Math.round(performance.now() - started),
-              results: [...previous.results.filter(item => item.looking_glass_id !== event.result.looking_glass_id), event.result],
+            } : previous);
+          } else if (event.type === "result") {
+            receivedResults += 1;
+            const partial = streamedOutputs[event.result.looking_glass_id];
+            const finalResult = event.result.status === "error" && partial
+              ? { ...event.result, output: `${partial}\n\n[Interrompido] ${event.result.output}` }
+              : event.result;
+            setPartialOutputs(previous => {
+              const next = { ...previous };
+              delete next[event.result.looking_glass_id];
+              return next;
+            });
+            setResult(previous => previous ? {
+              ...previous,
+              duration_ms: Math.round(performance.now() - started),
+              results: [...previous.results.filter(item => item.looking_glass_id !== finalResult.looking_glass_id), finalResult],
             } : previous);
           } else {
             setResult(previous => previous ? { ...previous, duration_ms: event.duration_ms } : previous);
@@ -272,7 +292,8 @@ function App() {
           <div className="results-summary"><div><strong>{result.results.length}/{result.total}</strong><span>LGs finalizados · {result.results.filter(r => r.status === "success").length} com sucesso</span></div><div><Clock3 size={16}/><span>{result.duration_ms} ms {running ? "decorridos" : "no total"}</span></div></div>
           <div className="results-grid">{queryIds.slice(resultPage * RESULTS_PER_PAGE, (resultPage + 1) * RESULTS_PER_PAGE).map(id => {
             const item = result.results.find(candidate => candidate.looking_glass_id === id);
-            return item ? <ResultCard key={id} item={item}/> : running ? <div className="result-card skeleton" key={id}><div/><span/><span/><span/></div> : null;
+            const source = items.find(candidate => candidate.id === id);
+            return item ? <ResultCard key={id} item={item}/> : running && partialOutputs[id] && source ? <LiveResultCard key={id} item={source} output={partialOutputs[id]}/> : running ? <div className="result-card skeleton" key={id}><div/><span/><span/><span/></div> : null;
           })}</div>
           {queryIds.length > RESULTS_PER_PAGE && <div className="results-pagination"><button type="button" disabled={resultPage === 0} onClick={() => setResultPage(page => page - 1)}>Anterior</button><span>Página <strong>{resultPage + 1}</strong> de {Math.ceil(queryIds.length / RESULTS_PER_PAGE)}</span><button type="button" disabled={resultPage >= Math.ceil(queryIds.length / RESULTS_PER_PAGE) - 1} onClick={() => setResultPage(page => page + 1)}>Próxima</button></div>}
         </div>}
@@ -297,6 +318,18 @@ function ResultCard({ item }: { item: QueryResult }) {
   return <article className={`result-card ${item.status}`}>
     <header><div className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={15}/> : <Terminal size={15}/>}</div><div><h3>{item.looking_glass_name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className={`result-status ${item.status}`}>{item.status === "success" ? "Concluído" : item.status === "unsupported" ? "Não suportado" : "Erro"}</span><span className="duration">{item.duration_ms} ms</span><button className="copy" onClick={copy}>{copied ? <Check size={16}/> : <Copy size={16}/>}</button></header>
     <pre>{item.output}</pre>
+  </article>;
+}
+
+function LiveResultCard({ item, output }: { item: LookingGlass; output: string }) {
+  const outputRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    const element = outputRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [output]);
+  return <article className="result-card running">
+    <header><div className={`protocol-icon ${item.protocol}`}><Terminal size={15}/></div><div><h3>{item.name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className="result-status running"><Loader2 className="spin" size={12}/> Executando</span></header>
+    <pre ref={outputRef} aria-live="polite">{output}</pre>
   </article>;
 }
 

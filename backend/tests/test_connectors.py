@@ -20,6 +20,16 @@ class ChunkReader:
             return ""
 
 
+class DelayedChunkReader(ChunkReader):
+    def __init__(self, chunks: list[str], delay: float):
+        super().__init__(chunks, block_after=True)
+        self.delay = delay
+
+    async def read(self, size: int) -> str:
+        await asyncio.sleep(self.delay)
+        return await super().read(size)
+
+
 def test_target_validation():
     assert validate_target("8.8.8.8", Operation.ping) == "8.8.8.8"
     assert validate_target("2001:db8::/32", Operation.bgp) == "2001:db8::/32"
@@ -74,6 +84,28 @@ def test_read_until_regex_has_an_informative_timeout():
                 settle_seconds=0.001,
             )
         )
+
+
+def test_read_timeout_resets_while_output_keeps_arriving():
+    reader = DelayedChunkReader(["hop 1\n", "hop 2\n", "router> "], 0.03)
+    updates: list[str] = []
+
+    async def run():
+        async def record(output: str):
+            updates.append(output)
+
+        return await read_until_regex(
+            reader,
+            r"[>#]\s*$",
+            0.05,
+            "o término do traceroute",
+            on_update=record,
+        )
+
+    output = asyncio.run(run())
+
+    assert output.endswith("router> ")
+    assert updates == ["hop 1\n", "hop 1\nhop 2\n", "hop 1\nhop 2\nrouter> "]
 
 
 def test_telnet_uses_specific_ipv6_command_when_configured():

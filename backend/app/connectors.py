@@ -3,6 +3,7 @@ import ipaddress
 import json
 import re
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -102,6 +103,7 @@ async def read_until_patterns(
     timeout: int,
     waiting_for: str,
     settle_seconds: float = PROMPT_SETTLE_SECONDS,
+    on_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> tuple[str, int]:
     compiled = [re.compile(pattern) for pattern in patterns]
     buffer = ""
@@ -129,6 +131,9 @@ async def read_until_patterns(
                 f"A conexão foi encerrada antes de receber {waiting_for}"
             )
         buffer += chunk
+        deadline = asyncio.get_running_loop().time() + timeout
+        if on_update:
+            await on_update(buffer)
 
 
 async def read_until_regex(
@@ -136,8 +141,15 @@ async def read_until_regex(
     pattern: str,
     timeout: int,
     waiting_for: str = "o prompt esperado",
+    on_update: Callable[[str], Awaitable[None]] | None = None,
 ) -> str:
-    output, _ = await read_until_patterns(reader, [pattern], timeout, waiting_for)
+    output, _ = await read_until_patterns(
+        reader,
+        [pattern],
+        timeout,
+        waiting_for,
+        on_update=on_update,
+    )
     return output
 
 
@@ -148,7 +160,24 @@ def telnet_command(config: TelnetConfig, operation: Operation, target: str) -> s
     return config.commands.get(operation)
 
 
-async def execute_telnet(config_data: dict, operation: Operation, target: str) -> str:
+def clean_telnet_output(output: str, command: str, prompt_regex: str) -> str:
+    output = ANSI_RE.sub("", output).replace("\r", "")
+    if "\n" not in output and command.strip().startswith(output.strip()):
+        return ""
+    lines = output.strip().splitlines()
+    if lines and command.strip() in lines[0]:
+        lines = lines[1:]
+    if lines and re.search(prompt_regex, lines[-1]):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+async def execute_telnet(
+    config_data: dict,
+    operation: Operation,
+    target: str,
+    on_output: Callable[[str], Awaitable[None]] | None = None,
+) -> str:
     config = TelnetConfig.model_validate(config_data)
     command = telnet_command(config, operation, target)
     if not command:
@@ -211,32 +240,43 @@ async def execute_telnet(config_data: dict, operation: Operation, target: str) -
             )
         rendered_command = render(command, target, operation)
         writer.write(rendered_command + "\n")
+
+        async def report_output(current: str):
+            if on_output:
+                cleaned = clean_telnet_output(
+                    current,
+                    rendered_command,
+                    config.prompt_regex,
+                )
+                if cleaned:
+                    await on_output(cleaned)
+
         output = await read_until_regex(
             reader,
             config.prompt_regex,
             config.timeout,
             f'o término do comando "{rendered_command}"',
+            on_update=report_output if on_output else None,
         )
         if config.quit_command:
             writer.write(config.quit_command + "\n")
-        output = ANSI_RE.sub("", output).replace("\r", "")
-        lines = output.strip().splitlines()
-        if lines and rendered_command.strip() in lines[0]:
-            lines = lines[1:]
-        if lines and re.search(config.prompt_regex, lines[-1]):
-            lines = lines[:-1]
-        return "\n".join(lines).strip()
+        return clean_telnet_output(output, rendered_command, config.prompt_regex)
     finally:
         writer.close()
 
 
-async def execute_one(lg: dict, operation: Operation, target: str) -> QueryResult:
+async def execute_one(
+    lg: dict,
+    operation: Operation,
+    target: str,
+    on_output: Callable[[str], Awaitable[None]] | None = None,
+) -> QueryResult:
     started = time.perf_counter()
     try:
         if lg["protocol"] == Protocol.http.value:
             output = await execute_http(lg["config"], operation, target)
         else:
-            output = await execute_telnet(lg["config"], operation, target)
+            output = await execute_telnet(lg["config"], operation, target, on_output)
         status = ResultStatus.success
         output = output or "Consulta concluída sem conteúdo na resposta."
     except NotImplementedError as exc:

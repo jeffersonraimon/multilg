@@ -117,13 +117,39 @@ async def stream_query(payload: QueryInput):
     concurrency = max(1, int(os.getenv("LG_QUERY_CONCURRENCY", "10")))
     semaphore = asyncio.Semaphore(concurrency)
 
-    async def limited(item):
-        async with semaphore:
-            return await execute_one(item, payload.operation, target)
-
     async def events():
         started = time.perf_counter()
-        tasks = [asyncio.create_task(limited(item)) for item in items]
+        queue: asyncio.Queue[dict] = asyncio.Queue()
+
+        async def run_item(item):
+            last_update = 0.0
+
+            async def report_partial(output: str):
+                nonlocal last_update
+                now = asyncio.get_running_loop().time()
+                if now - last_update < 0.15:
+                    return
+                last_update = now
+                await queue.put(
+                    {
+                        "type": "partial",
+                        "looking_glass_id": item["id"],
+                        "output": output,
+                    }
+                )
+
+            async with semaphore:
+                result = await execute_one(
+                    item,
+                    payload.operation,
+                    target,
+                    report_partial if payload.operation.value == "traceroute" else None,
+                )
+            await queue.put(
+                {"type": "result", "result": result.model_dump(mode="json")}
+            )
+
+        tasks = [asyncio.create_task(run_item(item)) for item in items]
         try:
             yield json.dumps(
                 {
@@ -134,12 +160,12 @@ async def stream_query(payload: QueryInput):
                     "total": len(items),
                 }
             ) + "\n"
-            for completed in asyncio.as_completed(tasks):
-                result = await completed
-                yield json.dumps(
-                    {"type": "result", "result": result.model_dump(mode="json")},
-                    ensure_ascii=False,
-                ) + "\n"
+            completed = 0
+            while completed < len(tasks):
+                event = await queue.get()
+                if event["type"] == "result":
+                    completed += 1
+                yield json.dumps(event, ensure_ascii=False) + "\n"
             yield json.dumps(
                 {
                     "type": "complete",

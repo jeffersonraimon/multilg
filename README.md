@@ -5,7 +5,7 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 ## Funcionalidades
 
 - Consulta paralela em múltiplos Looking Glass.
-- Resultados progressivos: cada LG aparece assim que termina, sem aguardar os demais.
+- Resultados progressivos: cada LG aparece assim que termina, sem aguardar os demais, e traceroutes Telnet exibem os saltos em tempo real.
 - Exibição de até quatro resultados por página, com navegação anterior/próxima.
 - Filtro automático dos LGs conforme a operação selecionada: BGP, ping ou traceroute.
 - Duplicação de LGs existentes para reaproveitar configurações com segurança.
@@ -76,6 +76,8 @@ Em **Desativar paginação**, escolha o perfil compatível com a CLI:
 Para outras CLIs, use o campo **Outros pré-comandos**, um comando por linha.
 
 Se o host abrir diretamente no prompt final mesmo com credenciais cadastradas, o conector detecta esse prompt e continua sem tentar autenticar. Mensagens de timeout indicam a etapa que não terminou, como conexão, autenticação, pré-comando ou comando principal.
+
+Durante traceroutes Telnet, cada trecho recebido é enviado progressivamente à interface. O timeout do prompt é contado por inatividade: enquanto o LG continuar produzindo saída, o comando pode ultrapassar o valor configurado; ele só expira após esse período sem receber novos dados.
 
 ## Limitações importantes
 
