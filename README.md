@@ -8,6 +8,7 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 - Resultados progressivos: cada LG aparece assim que termina, sem aguardar os demais.
 - Exibição de até quatro resultados por página, com navegação anterior/próxima.
 - Filtro automático dos LGs conforme a operação selecionada: BGP, ping ou traceroute.
+- Duplicação de LGs existentes para reaproveitar configurações com segurança.
 - Histórico local dos oito últimos IPs ou prefixos consultados, com atalhos e opção para limpar.
 - Configuração HTTP genérica para requisições GET e POST, respostas em texto ou JSON e extração por regex.
 - Sessões Telnet com autenticação opcional, prompts configuráveis e pré-comandos.
@@ -87,6 +88,7 @@ Endpoints principais:
 - `GET /api/looking-glasses`
 - `POST /api/looking-glasses`
 - `PUT /api/looking-glasses/{id}`
+- `POST /api/looking-glasses/{id}/duplicate`
 - `DELETE /api/looking-glasses/{id}`
 - `POST /api/query`
 - `POST /api/query/stream`

@@ -218,6 +218,15 @@ function App() {
     catch (e) { setError((e as Error).message); }
   };
 
+  const duplicate = async (item: LookingGlass) => {
+    try {
+      const copy = await api<LookingGlass>(`/api/looking-glasses/${item.id}/duplicate`, { method: "POST" });
+      await loadItems();
+      setEditing(copy);
+      setModal(true);
+    } catch (e) { setError((e as Error).message); }
+  };
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Network size={21}/></div><div><strong>MultiLG</strong><span>Looking Glass Client</span></div></div>
@@ -243,7 +252,7 @@ function App() {
             </button>)}
           </div>
           <div className="query-row">
-            <label><span>IP ou prefixo</span><div className="input-with-icon"><Globe2 size={19}/><input value={target} onChange={e => setTarget(e.target.value)} placeholder={operation === "bgp" ? "2001:db8::/32" : "8.8.8.8"} required autoFocus/></div></label>
+            <label><span>IP ou prefixo</span><div className="input-with-icon"><Globe2 size={19}/><input value={target} onChange={e => setTarget(e.target.value)} placeholder={operation === "bgp" ? "1.1.1.0/24 ou 2001:db8::/32" : "8.8.8.8"} required autoFocus/></div></label>
             <button className="run-button" disabled={running || !supportedCount}>{running ? <Loader2 className="spin" size={19}/> : <Search size={19}/>} {running ? "Consultando..." : `Consultar ${supportedCount} LG${supportedCount === 1 ? "" : "s"}`}</button>
           </div>
           {recentTargets.length > 0 && <div className="target-history"><span><Clock3 size={13}/> Recentes</span><div>{recentTargets.map(value => <button type="button" className={target === value ? "selected" : ""} onClick={() => setTarget(value)} key={value}>{value}</button>)}</div><button type="button" className="clear-history" onClick={clearTargetHistory}>Limpar</button></div>}
@@ -267,6 +276,7 @@ function App() {
           <div className={`big-protocol ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={22}/> : <Terminal size={22}/>}</div>
           <div className="provider-main"><div><h3>{item.name}</h3><span className={`badge ${item.enabled ? "online" : "off"}`}><i/>{item.enabled ? "Habilitado" : "Desabilitado"}</span></div><p>{describe(item)}</p></div>
           <div className="operation-badges">{configuredOperations(item).map(op => <span key={op}>{op === "traceroute" ? "TRACE" : op.toUpperCase()}</span>)}</div>
+          <button className="icon-button" title="Duplicar" onClick={() => duplicate(item)}><Copy size={17}/></button>
           <button className="icon-button" title="Editar" onClick={() => { setEditing(item); setModal(true); }}><Edit3 size={17}/></button>
           <button className="icon-button danger" title="Remover" onClick={() => remove(item)}><Trash2 size={17}/></button>
         </article>)}</div>}

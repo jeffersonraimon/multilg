@@ -122,8 +122,22 @@ class Database:
             )
         return self.get(item_id)
 
+    def duplicate(self, item_id: str) -> dict | None:
+        current = self.get(item_id, reveal=True)
+        if not current:
+            return None
+        suffix = " (cópia)"
+        name = current["name"][: 80 - len(suffix)] + suffix
+        return self.create(
+            {
+                "name": name,
+                "protocol": current["protocol"],
+                "enabled": False,
+                "config": current["config"],
+            }
+        )
+
     def delete(self, item_id: str) -> bool:
         with self.lock, self._connect() as conn:
             cursor = conn.execute("DELETE FROM looking_glasses WHERE id = ?", (item_id,))
         return cursor.rowcount > 0
-

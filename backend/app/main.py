@@ -56,6 +56,14 @@ def update_looking_glass(item_id: str, payload: LookingGlassInput):
     return result
 
 
+@app.post("/api/looking-glasses/{item_id}/duplicate", status_code=201)
+def duplicate_looking_glass(item_id: str):
+    result = database().duplicate(item_id)
+    if not result:
+        raise HTTPException(404, "Looking Glass não encontrado")
+    return result
+
+
 @app.delete("/api/looking-glasses/{item_id}", status_code=204)
 def delete_looking_glass(item_id: str):
     if not database().delete(item_id):
