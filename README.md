@@ -160,6 +160,43 @@ A listagem de Looking Glasses utilizada na criação dos templates foi obtida no
 - Esta versão não possui login próprio. Restrinja a porta 8080 por firewall, VPN ou reverse proxy com autenticação.
 - Cadastre apenas serviços que você tem autorização para consultar e respeite limites de uso dos provedores.
 
+## Looking Glasses incompatíveis (por enquanto)
+
+  ### 🛑 1. Portais Web Legados / Sem API REST Exposta 
+
+  Estes Looking Glasses utilizam interfaces Web próprias baseadas em formulários HTML clássicos (CGI/PHP/Perl) sem expor uma API REST ou endpoints padronizados para automação:
+
+  • Nacionais: Brasilnet Telecom, DigitalNet MS, Vianet Telecomunicações, GGNET, GOX Internet, Hokinet, Itanet Conecta, Infortel, Intercol, Internet Way, IVR NET, IX.br ALICE, Kinghost, N4 Telecom, Sitelbra, Sumicity, TJ NET, USP TI, W8 Telecom.
+  • Internacionais & CDNs: Cogent, Colt, Globenet, GTT (Ginernet), HE, Cirion, MEO, NLNOG, Orange, PJSC Rostelecom.
+
+  ### 🛡️ 2. Protegidos por CAPTCHA / Cloudflare 
+
+  Possuem proteção WAF/Cloudflare ativada (desafio JS/CAPTCHA), o que impede requisições automatizadas do backend:
+
+  • Nacionais: AW Fibra, BitCom, Br.digital, Ferenz Networks, Hostzone, Junto Telecom, Sebratel Tecnologia, Wirelink, Wixnet.
+  • Internacionais: NTT, Leaseweb, Angola Cables, Seabone Sparkle.
+
+  ### 🔌 3. Fora do Ar ou Com Firewall Bloqueando 
+
+  O servidor ou o serviço de Looking Glass está inacessível (Connection Timeout / Refused):
+
+  • Nacionais: Araujo SAT, Asap Telecom, Flextel Network, K2 Telecom, NBS Telecom, Net&Com, OpenX, Semear Telecom, Sinal Br Telecom, Vero Internet.
+  • Internacionais & CDNs: G-Core Labs, Tata, Telia/Arelion, Telxius, Worldstream, Zayo, CDS Global, Zenlayer.
+
+  ### ⚠️ 4. API Hyperglass Offline / Desativada 
+
+  O site abre a interface gráfica do Hyperglass no navegador, porém o backend (/api/devices ou /api/query) no servidor deles está fora do ar ou desativado:
+
+  • Nacionais: Adylnet, Avanza Telecom, Conid, Eletronet, Softdados Telecom.
+  • Internacionais: Seaborn.
+
+  ### 🔑 5. Protocolos Não Suportados ou Erros de Servidor 
+
+  • Internexa: Utiliza acesso exclusivo via SSH (ssh bgp_view@...). O MultiLG suporta integrações via HTTP (Hyperglass/API) e Telnet.
+  • Algar Telecom & GTT Public RS: Portas Telnet abertas, mas recusam conexões sem autenticação interativa ou comandos específicos de CLI.
+  • Fasternet & Forte Telecom: Retornam erros HTTP 502 Bad Gateway e 404 Not Found no próprio servidor.
+
+
 ## API
 
 A documentação interativa está disponível em `http://IP-DO-SERVIDOR:8080/docs`.
