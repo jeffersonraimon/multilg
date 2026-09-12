@@ -2,6 +2,16 @@
 
 Cliente web auto-hospedado para executar uma única consulta em vários Looking Glass e comparar os resultados lado a lado. Suporta fontes HTTP/HTTPS e Telnet, com operações de ping, traceroute, rota BGP, community BGP e expressão regular de AS Path configuráveis por provedor.
 
+<p align="center">
+  <img src="./img/multilg-1.png" alt="Consulta">
+</p>
+
+
+<p align="center">
+  <img src="./img/multilg-2.png" alt="Cadastro de LGs">
+</p>
+
+
 ## Funcionalidades
 
 - Consulta paralela em múltiplos Looking Glass.
