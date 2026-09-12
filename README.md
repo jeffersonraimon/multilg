@@ -151,6 +151,8 @@ O MultiLG permite exportar e importar a lista de Looking Glasses cadastrados em 
 ### Templates Prontos (`./template`)
 Na pasta [`./template`](./template), estão disponíveis os modelos JSON prontos e validados para importação direta.
 
+A listagem de Looking Glasses utilizada na criação dos templates foi obtida no [Brasil Peering Forum](https://wiki.brasilpeeringforum.org/w/Looking_Glass)
+
 ## Limitações importantes
 
 - Looking Glass com CAPTCHA, JavaScript obrigatório, CSRF dinâmico ou autenticação em múltiplas etapas precisa de um adaptador específico; o conector HTTP genérico não contorna essas proteções.
