@@ -19,6 +19,9 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 - Exibição de até quatro resultados por página, com navegação anterior/próxima.
 - Cancelamento imediato da consulta, preservando a saída parcial, e limpeza dos resultados exibidos.
 - Filtro automático dos LGs conforme a operação selecionada: BGP, community, AS Path, ping ou traceroute.
+- Importação e exportação da lista de LGs em formato JSON diretamente pela interface web.
+- Deduplicação inteligente na importação (atualiza LGs existentes por Nome/ID sem gerar duplicatas).
+- Pasta `./template/` com modelos JSON de Looking Glasses testados e funcionais.
 - Duplicação de LGs existentes para reaproveitar configurações com segurança.
 - Histórico local dos oito últimos IPs ou prefixos consultados, com atalhos e opção para limpar.
 - Configuração HTTP genérica para requisições GET e POST, respostas em texto ou JSON e extração por regex.
@@ -136,6 +139,18 @@ Se o host abrir diretamente no prompt final mesmo com credenciais cadastradas, o
 
 Durante traceroutes Telnet, cada trecho recebido é enviado progressivamente à interface. O timeout do prompt é contado por inatividade: enquanto o LG continuar produzindo saída, o comando pode ultrapassar o valor configurado; ele só expira após esse período sem receber novos dados.
 
+## Importação, Exportação e Templates Prontos
+
+O MultiLG permite exportar e importar a lista de Looking Glasses cadastrados em arquivo JSON.
+
+### Importação e Exportação
+- **Exportar**: Baixa o arquivo `multilg-looking-glasses.json` contendo todas as fontes registradas.
+- **Importar**: Permite carregar um arquivo JSON contendo um ou vários LGs em lote.
+- **Deduplicação Inteligente**: Se o LG importado coincidir por Nome ou ID com um registro existente no banco, o MultiLG atualiza as configurações em vez de criar cadastros duplicados.
+
+### Templates Prontos (`./template`)
+Na pasta [`./template`](./template), estão disponíveis os modelos JSON prontos e validados para importação direta.
+
 ## Limitações importantes
 
 - Looking Glass com CAPTCHA, JavaScript obrigatório, CSRF dinâmico ou autenticação em múltiplas etapas precisa de um adaptador específico; o conector HTTP genérico não contorna essas proteções.
@@ -150,6 +165,8 @@ A documentação interativa está disponível em `http://IP-DO-SERVIDOR:8080/doc
 Endpoints principais:
 
 - `GET /api/looking-glasses`
+- `GET /api/looking-glasses/export`
+- `POST /api/looking-glasses/import`
 - `POST /api/looking-glasses`
 - `PUT /api/looking-glasses/{id}`
 - `POST /api/looking-glasses/{id}/duplicate`

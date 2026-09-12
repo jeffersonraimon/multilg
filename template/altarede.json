@@ -1,0 +1,22 @@
+{
+  "name": "LG Altarede",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "http://lg.altarede.com.br",
+    "location": "rio_de_janeiro_scv01",
+    "api_format": "v1",
+    "vrf": "global",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "bgp": "bgp_route",
+      "bgp_community": "bgp_community",
+      "bgp_aspath": "bgp_aspath",
+      "ping": "ping",
+      "traceroute": "traceroute"
+    }
+  }
+}

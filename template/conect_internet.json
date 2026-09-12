@@ -1,0 +1,22 @@
+{
+  "name": "LG Conect Internet",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.conectrj.net.br",
+    "location": "rio_de_janeiro_-_rs1",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": true,
+    "timeout": 30,
+    "verify_tls": true,
+    "query_types": {
+      "bgp_community": "bird_communities_custom",
+      "ping": "__hyperglass_bird_ping__",
+      "bgp": "bird_bgp_route_custom",
+      "bgp_aspath": "bird_as_path_custom",
+      "traceroute": "__hyperglass_bird_traceroute__"
+    }
+  }
+}

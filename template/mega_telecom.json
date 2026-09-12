@@ -1,0 +1,22 @@
+{
+  "name": "LG Mega Telecom",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.megatelecom.com.br",
+    "location": "as28329_-_uberlndia_mg_joo_naves",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 120,
+    "verify_tls": true,
+    "query_types": {
+      "bgp": "__hyperglass_cisco_xr_bgp_route__",
+      "bgp_aspath": "__hyperglass_cisco_xr_bgp_aspath__",
+      "traceroute": "__hyperglass_cisco_xr_traceroute__",
+      "ping": "__hyperglass_cisco_xr_ping__",
+      "bgp_community": "__hyperglass_cisco_xr_bgp_community__"
+    }
+  }
+}

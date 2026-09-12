@@ -1,0 +1,22 @@
+{
+  "name": "LG PomboNet",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.pombonet.net.br",
+    "location": "pombonet_jundia_sp",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "__hyperglass_frr_ping__",
+      "bgp": "__hyperglass_frr_bgp_route__",
+      "bgp_aspath": "__hyperglass_frr_bgp_aspath__",
+      "bgp_community": "__hyperglass_frr_bgp_community__",
+      "traceroute": "__hyperglass_frr_traceroute__"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "LG Latitude",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.latitude.sh",
+    "location": "london_2",
+    "api_format": "v1",
+    "vrf": "global",
+    "bootstrap_session": false,
+    "timeout": 300,
+    "verify_tls": true,
+    "query_types": {
+      "bgp": "bgp_route",
+      "ping": "ping",
+      "traceroute": "traceroute"
+    }
+  }
+}

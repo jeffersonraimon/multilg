@@ -1,0 +1,20 @@
+{
+  "name": "LG Aranet",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.aranet.net.br",
+    "location": "aux1",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "bgp": "bgp_route",
+      "traceroute": "traceroute",
+      "ping": "ping"
+    }
+  }
+}

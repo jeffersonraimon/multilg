@@ -1,0 +1,22 @@
+{
+  "name": "LG VIA MS",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.viams.com.br",
+    "location": "cpe01",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "bgp_community": "__hyperglass_huawei_bgp_community__",
+      "bgp": "__hyperglass_huawei_bgp_route__",
+      "ping": "__hyperglass_huawei_ping__",
+      "bgp_aspath": "__hyperglass_huawei_bgp_aspath__",
+      "traceroute": "__hyperglass_huawei_traceroute__"
+    }
+  }
+}
