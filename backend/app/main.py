@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -41,6 +41,62 @@ def health():
 @app.get("/api/looking-glasses")
 def list_looking_glasses():
     return database().list()
+
+
+@app.get("/api/looking-glasses/export")
+def export_looking_glasses():
+    items = database().list(reveal=True)
+    export_data = [
+        {
+            "name": item["name"],
+            "protocol": item["protocol"],
+            "enabled": item["enabled"],
+            "config": item["config"],
+        }
+        for item in items
+    ]
+    headers = {"Content-Disposition": "attachment; filename=multilg-looking-glasses.json"}
+    return Response(
+        content=json.dumps(export_data, indent=2, ensure_ascii=False),
+        media_type="application/json",
+        headers=headers,
+    )
+
+
+@app.post("/api/looking-glasses/import", status_code=201)
+async def import_looking_glasses(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Arquivo JSON inválido")
+
+    raw_items = body.get("items") if isinstance(body, dict) else body
+    if not isinstance(raw_items, list):
+        raise HTTPException(
+            400, "O JSON deve ser uma lista de LGs ou um objeto com a propriedade 'items'"
+        )
+
+    if not raw_items:
+        raise HTTPException(400, "Nenhum Looking Glass para importar no arquivo")
+
+    validated_items: list[LookingGlassInput] = []
+    for idx, item in enumerate(raw_items, 1):
+        if not isinstance(item, dict):
+            raise HTTPException(422, f"Elemento #{idx} inválido (deve ser um objeto)")
+        try:
+            validated_items.append(LookingGlassInput.model_validate(item))
+        except Exception as exc:
+            lg_name = item.get("name", "sem nome")
+            raise HTTPException(
+                422, f"Erro de validação no LG #{idx} ('{lg_name}'): {exc}"
+            ) from exc
+
+    created = []
+    for item in validated_items:
+        result = database().create(item.model_dump(mode="json"))
+        created.append(result)
+
+    return {"imported": len(created), "items": created}
 
 
 @app.post("/api/looking-glasses", status_code=201)

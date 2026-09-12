@@ -15,6 +15,7 @@ nav button:hover { background:#101e1b; color:#cde0da; } nav button.active { colo
 .sidebar-foot { margin-top:auto; padding:12px; color:var(--muted); font-size:12px; display:flex; gap:8px; align-items:center; }.status-dot { width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 9px var(--accent); }
 main { grid-column:2; padding:34px 40px 70px; max-width:1500px; width:100%; margin:0 auto; }
 .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }.topbar h1 { margin:0; font-size:27px; letter-spacing:-.6px; }.topbar p { margin:5px 0 0; color:var(--muted); font-size:14px; }
+.header-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .primary,.secondary,.run-button { border-radius:10px; border:0; height:42px; padding:0 16px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font-weight:700; font-size:14px; }
 .primary,.run-button { color:#04110d; background:var(--accent); box-shadow:0 7px 20px #40e0a21a; }.primary:hover,.run-button:hover { background:#64e9b6; }.primary:disabled,.run-button:disabled { opacity:.5; cursor:not-allowed; }.secondary { color:#c6d5d1; background:#14221f; border:1px solid var(--line); }
 .alert { margin-bottom:18px; min-height:44px; display:flex; gap:10px; align-items:center; padding:10px 13px; border:1px solid #713e3e; background:#30191d; color:#f6b3b9; border-radius:10px; font-size:14px; }.alert button { margin-left:auto; color:inherit; border:0; background:none; }

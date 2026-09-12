@@ -2,8 +2,8 @@ import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity, ArrowLeftRight, Braces, Check, ChevronDown, CircleAlert, Clock3,
-  Copy, Edit3, Globe2, Hash, Loader2, Network, Plus, Radio, Regex, Route, Search,
-  RefreshCw, Server, Settings2, Terminal, Trash2, X
+  Copy, Download, Edit3, Globe2, Hash, Loader2, Network, Plus, Radio, Regex, Route, Search,
+  RefreshCw, Server, Settings2, Terminal, Trash2, Upload, X
 } from "lucide-react";
 import "./styles.css";
 
@@ -381,6 +381,45 @@ function App() {
     } catch (e) { setError((e as Error).message); }
   };
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const exportLgs = async () => {
+    try {
+      const response = await fetch("/api/looking-glasses/export");
+      if (!response.ok) throw new Error("Erro ao exportar Looking Glasses");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `multilg-looking-glasses-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { setError((e as Error).message); }
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error("O arquivo selecionado não contém um JSON válido.");
+      }
+      const result = await api<{ imported: number }>("/api/looking-glasses/import", {
+        method: "POST",
+        body: JSON.stringify(json),
+      });
+      await loadItems();
+      alert(`${result.imported} Looking Glass(es) importado(s) com sucesso!`);
+    } catch (e) { setError((e as Error).message); }
+    finally {
+      if (event.target) event.target.value = "";
+    }
+  };
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Network size={21}/></div><div><strong>MultiLG</strong><span>Looking Glass Client</span></div></div>
@@ -393,7 +432,12 @@ function App() {
     <main>
       <header className="topbar">
         <div><h1>{page === "query" ? "Consulta distribuída" : "Looking Glasses"}</h1><p>{page === "query" ? "Compare a visão da Internet em vários provedores." : "Cadastre e configure as fontes de consulta."}</p></div>
-        {page === "providers" && <button className="primary" onClick={() => { setEditing(null); setModal(true); }}><Plus size={18}/> Adicionar LG</button>}
+        {page === "providers" && <div className="header-actions">
+          <input type="file" ref={fileInputRef} accept=".json" style={{ display: "none" }} onChange={handleImportFile} />
+          <button className="secondary" title="Exportar LGs em JSON" onClick={exportLgs}><Download size={18}/> Exportar</button>
+          <button className="secondary" title="Importar LGs de arquivo JSON" onClick={() => fileInputRef.current?.click()}><Upload size={18}/> Importar</button>
+          <button className="primary" onClick={() => { setEditing(null); setModal(true); }}><Plus size={18}/> Adicionar LG</button>
+        </div>}
       </header>
 
       {error && <div className="alert"><CircleAlert size={18}/><span>{error}</span><button onClick={() => setError("")}><X size={17}/></button></div>}
