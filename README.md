@@ -205,3 +205,8 @@ O frontend abre em `http://localhost:5173` e já encaminha `/api` para o backend
 
 Uso da API do Hyperglass, por [@jorgewallace](https://github.com/jorgewallace).
 
+## Licença
+
+Este projeto está licenciado sob a Licença MIT - consulte o arquivo [LICENSE](./LICENSE) para obter mais detalhes.
+by [@jeffersonraimon](https://github.com/jeffersonraimon).
+

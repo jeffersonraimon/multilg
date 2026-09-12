@@ -8,7 +8,7 @@ button { cursor:pointer; }
 .sidebar { position:fixed; inset:0 auto 0 0; width:240px; padding:24px 16px; background:#081210e8; border-right:1px solid var(--line); backdrop-filter:blur(18px); display:flex; flex-direction:column; z-index:5; }
 .brand { display:flex; gap:12px; align-items:center; padding:0 8px 30px; }
 .brand-mark { width:40px; height:40px; border:1px solid #28735c; background:linear-gradient(145deg,#123d32,#0b211c); color:var(--accent); display:grid; place-items:center; border-radius:12px; box-shadow:0 0 24px #40e0a219; }
-.brand strong { font-size:18px; letter-spacing:-.3px; display:block; }.brand span { color:var(--muted); font-size:12px; }
+.brand strong { font-size:18px; letter-spacing:-.3px; display:block; }.brand span { color:var(--muted); font-size:12px; display:block; }.brand .brand-author { color:var(--accent); font-size:11px; font-weight:600; font-family:"JetBrains Mono",monospace; margin-top:3px; display:block; }
 nav { display:grid; gap:6px; } nav button { height:44px; border:0; border-radius:10px; background:transparent; color:#8fa09b; display:flex; align-items:center; gap:11px; padding:0 12px; text-align:left; font-weight:600; font-size:14px; }
 nav button:hover { background:#101e1b; color:#cde0da; } nav button.active { color:var(--accent); background:#10251f; box-shadow:inset 3px 0 var(--accent); }
 .nav-count { margin-left:auto; border:1px solid #2c403a; border-radius:999px; padding:1px 7px; font-size:12px; }

@@ -425,7 +425,7 @@ function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark"><Network size={21}/></div><div><strong>MultiLG</strong><span>Looking Glass Client</span></div></div>
+      <div className="brand"><div className="brand-mark"><Network size={21}/></div><div><strong>MultiLG</strong><span>Looking Glass Client</span><span className="brand-author">by @jeffersonraimon</span></div></div>
       <nav>
         <button className={page === "query" ? "active" : ""} onClick={() => setPage("query")}><Terminal size={19}/> Consultar</button>
         <button className={page === "providers" ? "active" : ""} onClick={() => setPage("providers")}><Server size={19}/> Looking Glasses <span className="nav-count">{items.length}</span></button>
