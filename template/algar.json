@@ -1,9 +1,9 @@
 {
-  "name": "LG AT&T",
+  "name": "LG Algar",
   "protocol": "telnet",
   "enabled": true,
   "config": {
-    "host": "route-server.ip.att.net",
+    "host": "201.48.0.2",
     "port": 23,
     "username": "rviews",
     "password": "rviews",
@@ -18,8 +18,8 @@
       "traceroute": "traceroute {target}",
       "bgp": "show route protocol bgp {target}"
     },
-    "commands_v6": {},
     "quit_command": "exit",
-    "timeout": 20
+    "timeout": 20,
+    "commands_v6": {}
   }
 }

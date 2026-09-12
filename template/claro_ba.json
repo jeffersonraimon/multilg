@@ -1,0 +1,22 @@
+{
+  "name": "LG CLARO BA",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.nocclaro.com.br",
+    "location": "salvador",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": true,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "__hyperglass_cisco_ios_ping__",
+      "traceroute": "__hyperglass_cisco_ios_traceroute__",
+      "bgp": "__hyperglass_cisco_ios_bgp_route__",
+      "bgp_community": "__hyperglass_cisco_ios_bgp_community__",
+      "bgp_aspath": "__hyperglass_cisco_ios_bgp_aspath__"
+    }
+  }
+}

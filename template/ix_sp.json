@@ -1,9 +1,9 @@
 {
-  "name": "LG AT&T",
+  "name": "LG IX-SP",
   "protocol": "telnet",
   "enabled": true,
   "config": {
-    "host": "route-server.ip.att.net",
+    "host": "lg.sp.ptt.br",
     "port": 23,
     "username": "rviews",
     "password": "rviews",
@@ -11,15 +11,15 @@
     "password_prompt": "(?i)password[: ]*$",
     "prompt_regex": "[>#]\\s*$",
     "pre_commands": [
-      "set cli screen-length 0"
+      "terminal length 0"
     ],
     "commands": {
-      "ping": "ping {target} wait 10",
-      "traceroute": "traceroute {target}",
-      "bgp": "show route protocol bgp {target}"
+      "bgp": "show ip bgp {target} longer-prefixes"
     },
-    "commands_v6": {},
     "quit_command": "exit",
-    "timeout": 20
+    "timeout": 20,
+    "commands_v6": {
+      "bgp": "show bgp {target} longer-prefixes"
+    }
   }
 }

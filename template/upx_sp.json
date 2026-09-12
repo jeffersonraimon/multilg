@@ -1,0 +1,21 @@
+{
+  "name": "LG UPX SP",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.upx.com",
+    "location": "so_paulo",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "show-ping",
+      "traceroute": "show-traceroute",
+      "bgp": "show-bgp-route6",
+      "bgp_community": "show-bgp-community"
+    }
+  }
+}

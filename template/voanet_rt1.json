@@ -1,0 +1,17 @@
+{
+  "name": "LG Voanet RT1",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.voanet.net.br",
+    "location": "ssaba_-_rta-01",
+    "timeout": 30,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "Juniper_Ping_RT1",
+      "traceroute": "Juniper_Traceroute_RT1",
+      "bgp": "__hyperglass_juniper_bgp_route_table__"
+    }
+  }
+}

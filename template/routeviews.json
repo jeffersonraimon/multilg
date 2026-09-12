@@ -1,9 +1,9 @@
 {
-  "name": "LG AT&T",
+  "name": "LG RouteViews",
   "protocol": "telnet",
   "enabled": true,
   "config": {
-    "host": "route-server.ip.att.net",
+    "host": "route-views.routeviews.org",
     "port": 23,
     "username": "rviews",
     "password": "rviews",
@@ -11,15 +11,19 @@
     "password_prompt": "(?i)password[: ]*$",
     "prompt_regex": "[>#]\\s*$",
     "pre_commands": [
-      "set cli screen-length 0"
+      "terminal length 0"
     ],
     "commands": {
-      "ping": "ping {target} wait 10",
+      "ping": "ping {target}",
       "traceroute": "traceroute {target}",
-      "bgp": "show route protocol bgp {target}"
+      "bgp": "show bgp ipv4 unicast {target} longer-prefixes"
     },
-    "commands_v6": {},
     "quit_command": "exit",
-    "timeout": 20
+    "timeout": 60,
+    "commands_v6": {
+      "ping": "ping ipv6 {target}",
+      "traceroute": "traceroute ipv6 {target}",
+      "bgp": "show bgp ipv6 unicast {target} longer-prefixes"
+    }
   }
 }

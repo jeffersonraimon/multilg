@@ -1,0 +1,22 @@
+{
+  "name": "LG EDGE UNO SP",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.edgeuno.com",
+    "location": "sao_paulo_brazil",
+    "api_format": "v1",
+    "vrf": "global",
+    "bootstrap_session": false,
+    "timeout": 240,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "ping",
+      "traceroute": "traceroute",
+      "bgp": "bgp_route",
+      "bgp_community": "bgp_community",
+      "bgp_aspath": "bgp_aspath"
+    }
+  }
+}
