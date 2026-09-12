@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#123d32" />
+      <stop offset="100%" stop-color="#0b211c" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64e9b6" />
+      <stop offset="100%" stop-color="#40e0a2" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background rounded box -->
+  <rect width="512" height="512" rx="128" fill="url(#bg)" stroke="#28735c" stroke-width="12" />
+  
+  <!-- Outer network ring -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#21b87e" stroke-width="12" stroke-dasharray="8 8" opacity="0.6" />
+
+  <!-- Network lines -->
+  <g stroke="url(#accent)" stroke-width="16" stroke-linecap="round" opacity="0.85">
+    <line x1="256" y1="256" x2="256" y2="128" />
+    <line x1="256" y1="256" x2="366" y2="320" />
+    <line x1="256" y1="256" x2="146" y2="320" />
+    <line x1="146" y1="320" x2="366" y2="320" />
+  </g>
+
+  <!-- Central Hub Node -->
+  <circle cx="256" cy="256" r="36" fill="url(#accent)" filter="url(#glow)" />
+  <circle cx="256" cy="256" r="20" fill="#07100f" />
+  
+  <!-- Peripheral Nodes -->
+  <circle cx="256" cy="128" r="28" fill="#10382f" stroke="url(#accent)" stroke-width="10" />
+  <circle cx="256" cy="128" r="12" fill="#40e0a2" />
+
+  <circle cx="366" cy="320" r="28" fill="#10382f" stroke="url(#accent)" stroke-width="10" />
+  <circle cx="366" cy="320" r="12" fill="#40e0a2" />
+
+  <circle cx="146" cy="320" r="28" fill="#10382f" stroke="url(#accent)" stroke-width="10" />
+  <circle cx="146" cy="320" r="12" fill="#40e0a2" />
+</svg>
