@@ -1,0 +1,20 @@
+{
+  "name": "LG Voanet RT3 HUAWEI",
+  "protocol": "http",
+  "enabled": true,
+  "config": {
+    "hyperglass_like": true,
+    "base_url": "https://lg.voanet.net.br",
+    "location": "ssaba_-_rta-03",
+    "api_format": "v2",
+    "vrf": "default",
+    "bootstrap_session": false,
+    "timeout": 90,
+    "verify_tls": true,
+    "query_types": {
+      "ping": "Huawei_Ping_RT3",
+      "traceroute": "Huawei_Traceroute_RT3",
+      "bgp": "__hyperglass_huawei_bgp_route__"
+    }
+  }
+}

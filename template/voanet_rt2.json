@@ -1,0 +1,20 @@
+{
+    "name": "LG Voanet RT2",
+    "protocol": "http",
+    "enabled": true,
+    "config": {
+      "hyperglass_like": true,
+      "base_url": "https://lg.voanet.net.br",
+      "location": "ssaba_-_rta-02",
+      "api_format": "v2",
+      "vrf": "default",
+      "bootstrap_session": false,
+      "timeout": 90,
+      "verify_tls": true,
+      "query_types": {
+        "ping": "Juniper_Ping_RT2",
+        "traceroute": "Juniper_Traceroute_RT2",
+        "bgp": "__hyperglass_juniper_bgp_route_table__"
+      }
+  }
+}
