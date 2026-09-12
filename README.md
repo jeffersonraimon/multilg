@@ -1,6 +1,6 @@
 # MultiLG Client
 
-Cliente web auto-hospedado para executar uma única consulta em vários Looking Glass e comparar os resultados lado a lado. Suporta fontes HTTP/HTTPS e Telnet, com operações de ping, traceroute e consulta BGP configuráveis por provedor.
+Cliente web auto-hospedado para executar uma única consulta em vários Looking Glass e comparar os resultados lado a lado. Suporta fontes HTTP/HTTPS e Telnet, com operações de ping, traceroute, rota BGP, community BGP e expressão regular de AS Path configuráveis por provedor.
 
 ## Funcionalidades
 
@@ -8,10 +8,12 @@ Cliente web auto-hospedado para executar uma única consulta em vários Looking 
 - Resultados progressivos: cada LG aparece assim que termina, sem aguardar os demais, e traceroutes Telnet exibem os saltos em tempo real.
 - Exibição de até quatro resultados por página, com navegação anterior/próxima.
 - Cancelamento imediato da consulta, preservando a saída parcial, e limpeza dos resultados exibidos.
-- Filtro automático dos LGs conforme a operação selecionada: BGP, ping ou traceroute.
+- Filtro automático dos LGs conforme a operação selecionada: BGP, community, AS Path, ping ou traceroute.
 - Duplicação de LGs existentes para reaproveitar configurações com segurança.
 - Histórico local dos oito últimos IPs ou prefixos consultados, com atalhos e opção para limpar.
 - Configuração HTTP genérica para requisições GET e POST, respostas em texto ou JSON e extração por regex.
+- Integração Hyperglass-like com descoberta de dispositivos e operações diretamente pela API.
+- Visualização amigável das rotas BGP estruturadas do Hyperglass, com destaque do melhor caminho, métricas, RPKI e communities.
 - Sessões Telnet com autenticação opcional, prompts configuráveis e pré-comandos.
 - Comandos Telnet IPv4 e IPv6 separados quando o equipamento exigir sintaxes diferentes.
 - Opções para desativar a paginação em equipamentos Cisco/FRR/RouteViews e Juniper/Junos.
@@ -30,7 +32,7 @@ Acesse `http://IP-DO-SERVIDOR:8080`. Os cadastros ficam em `./data/multilg.db`.
 
 ## Executar uma consulta
 
-1. Escolha BGP, ping ou traceroute.
+1. Escolha BGP, BGP Community, BGP AS Path, ping ou traceroute.
 2. Informe um endereço IP; para BGP também é aceito um prefixo CIDR.
 3. Selecione os LGs e clique em **Consultar**.
 
@@ -51,6 +53,50 @@ Exemplo de uma API JSON:
 - JSON path: `data.output`
 
 Para uma página HTML, selecione resposta `Texto / HTML` e use uma expressão regular com grupo de captura, por exemplo `<pre[^>]*>([\s\S]*?)</pre>`.
+
+## Cadastro Hyperglass-like
+
+Selecione **HTTP / HTTPS** e marque **Hyperglass-like**. Informe somente a URL raiz do LG, por exemplo `http://lg.voanet.net.br`, e clique em **Detectar API**. O MultiLG consulta:
+
+- `/api/devices/` para listar os dispositivos disponíveis;
+- `/api/queries/` para identificar BGP, ping e traceroute;
+- os metadados públicos do frontend para obter o `queryType` interno de cada dispositivo;
+- `/api/query` para executar a consulta selecionada.
+
+Depois da detecção, escolha o dispositivo (`queryLocation`). Um cadastro representa um dispositivo do Hyperglass; para usar mais de um roteador da mesma instalação, duplique o LG e altere a localização.
+
+O botão **Detectar API** preenche os `queryType` específicos do dispositivo selecionado e os atualiza ao trocar de roteador. Isso cobre instalações com diretivas personalizadas, inclusive quando roteadores da mesma instalação usam plataformas diferentes. Se esses metadados não estiverem publicados, os padrões Juniper abaixo são usados como base:
+
+- Ping: `__hyperglass_juniper_ping__`
+- Traceroute: `__hyperglass_juniper_traceroute__`
+- BGP estruturado: `__hyperglass_juniper_bgp_route_table__`
+
+Esses identificadores continuam editáveis separadamente. Durante uma consulta, se a API rejeitar um identificador salvo como inexistente, o MultiLG tenta detectá-lo novamente e repete a operação automaticamente. Operações desmarcadas deixam de aparecer para esse LG na tela de consulta.
+
+O MultiLG detecta tanto o Hyperglass 2.x (`camelCase`, endpoint `/api/query`) quanto o formato legado 1.x (`snake_case`, endpoint `/api/query/` e VRF). Também importa o timeout publicado pelo servidor, limitado a 300 segundos, o que é útil para pesquisas de community e AS Path em tabelas grandes.
+
+Instalações que protegem `/api` com um cookie de sessão também são detectadas. O conector abre a página inicial para receber o cookie HTTP-only e então executa o POST usando a mesma sessão, sem exigir configuração manual.
+
+Quando disponíveis no dispositivo, duas operações avançadas aparecem automaticamente:
+
+- **BGP Community**: aceita valores como `7195:55000` ou `large:7195:55:0`;
+- **BGP AS Path**: aceita expressões como `_13335$`, `^65000_` ou `_65000_65001_`.
+
+As operações são detectadas por roteador. Assim, uma instalação pode oferecer as cinco consultas em alguns locais e somente BGP, ping e traceroute em outros, sem exibir opções incompatíveis.
+
+Se o Hyperglass responder como sucesso, mas a saída do roteador contiver erros de CLI conhecidos, como `% Invalid input detected`, o MultiLG marca o resultado como erro e mostra a mensagem do equipamento.
+
+O corpo enviado à API segue o formato nativo do Hyperglass:
+
+```json
+{
+  "queryLocation": "ssaba_-_rta-01",
+  "queryType": "__hyperglass_juniper_bgp_route_table__",
+  "queryTarget": ["8.8.4.4"]
+}
+```
+
+Quando `output` contém rotas BGP estruturadas, o resultado é apresentado como painéis de rotas, com o melhor caminho destacado. O botão `{}` alterna para o JSON original e o botão de cópia preserva a resposta completa. Mensagens de erro retornadas pela API também são exibidas no próprio resultado.
 
 ## Cadastro Telnet
 
@@ -98,10 +144,11 @@ Endpoints principais:
 - `PUT /api/looking-glasses/{id}`
 - `POST /api/looking-glasses/{id}/duplicate`
 - `DELETE /api/looking-glasses/{id}`
+- `POST /api/hyperglass/discover`
 - `POST /api/query`
 - `POST /api/query/stream`
 
-`POST /api/query` retorna o lote completo. `POST /api/query/stream` usa NDJSON e envia eventos progressivos dos tipos `start`, `result` e `complete`; é o endpoint utilizado pela interface web.
+`POST /api/query` retorna o lote completo. `POST /api/query/stream` usa NDJSON e envia eventos progressivos dos tipos `start`, `partial`, `result` e `complete`; é o endpoint utilizado pela interface web.
 
 ## Desenvolvimento local
 
@@ -124,3 +171,8 @@ npm run dev
 ```
 
 O frontend abre em `http://localhost:5173` e já encaminha `/api` para o backend na porta 8080.
+
+## Contribuição
+
+Uso da API do Hyperglass, por [@jorgewallace](https://github.com/jorgewallace).
+

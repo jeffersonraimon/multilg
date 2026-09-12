@@ -10,9 +10,9 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .connectors import execute_one, validate_target
+from .connectors import discover_hyperglass, execute_one, validate_target
 from .database import Database
-from .schemas import BatchResult, LookingGlassInput, QueryInput
+from .schemas import BatchResult, HyperglassDiscoveryInput, LookingGlassInput, QueryInput
 
 db: Database | None = None
 
@@ -69,6 +69,14 @@ def delete_looking_glass(item_id: str):
     if not database().delete(item_id):
         raise HTTPException(404, "Looking Glass não encontrado")
     return Response(status_code=204)
+
+
+@app.post("/api/hyperglass/discover")
+async def hyperglass_discovery(payload: HyperglassDiscoveryInput):
+    try:
+        return await discover_hyperglass(payload.model_dump(mode="json"))
+    except (ConnectionError, TimeoutError, ValueError) as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.post("/api/query", response_model=BatchResult)

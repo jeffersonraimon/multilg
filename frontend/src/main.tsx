@@ -1,13 +1,13 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  Activity, ArrowLeftRight, Check, ChevronDown, CircleAlert, Clock3,
-  Copy, Edit3, Globe2, Loader2, Network, Plus, Radio, Route, Search,
-  Server, Settings2, Terminal, Trash2, X
+  Activity, ArrowLeftRight, Braces, Check, ChevronDown, CircleAlert, Clock3,
+  Copy, Edit3, Globe2, Hash, Loader2, Network, Plus, Radio, Regex, Route, Search,
+  RefreshCw, Server, Settings2, Terminal, Trash2, X
 } from "lucide-react";
 import "./styles.css";
 
-type Operation = "ping" | "traceroute" | "bgp";
+type Operation = "ping" | "traceroute" | "bgp" | "bgp_community" | "bgp_aspath";
 type Protocol = "http" | "telnet";
 type RequestConfig = {
   url: string; method: "GET" | "POST"; query: Record<string, string>;
@@ -30,6 +30,25 @@ type QueryStreamEvent =
   | { type: "partial"; looking_glass_id: string; output: string }
   | { type: "result"; result: QueryResult }
   | { type: "complete"; duration_ms: number };
+type HyperglassDevice = {
+  id: string; name: string; group?: string | null;
+  query_types?: Partial<Record<Operation, string>>;
+  vrf?: string;
+};
+type HyperglassDiscovery = {
+  base_url: string; devices: HyperglassDevice[]; queries: string[];
+  api_format: "v1" | "v2"; version: string; request_timeout?: number | null;
+  bootstrap_session?: boolean;
+};
+type BgpRoute = {
+  prefix: string; active: boolean; age: number; weight: number; med: number;
+  local_preference: number; as_path: number[]; communities: string[];
+  next_hop: string; source_as: number; source_rid: string; peer_rid: string;
+  rpki_state: number;
+};
+type StructuredBgpOutput = {
+  vrf: string; count: number; routes: BgpRoute[]; winning_weight: "low" | "high" | string;
+};
 
 const PAGING_PRESETS = [
   { value: "", label: "Não alterar" },
@@ -40,6 +59,69 @@ const PAGING_COMMANDS = new Set<string>(PAGING_PRESETS.map(option => option.valu
 const TARGET_HISTORY_KEY = "multilg.recent-targets";
 const TARGET_HISTORY_LIMIT = 8;
 const RESULTS_PER_PAGE = 4;
+const OPERATIONS: Operation[] = ["ping", "traceroute", "bgp", "bgp_community", "bgp_aspath"];
+const HYPERGLASS_DEFAULT_QUERY_TYPES: Partial<Record<Operation, string>> = {
+  ping: "__hyperglass_juniper_ping__",
+  traceroute: "__hyperglass_juniper_traceroute__",
+  bgp: "__hyperglass_juniper_bgp_route_table__",
+};
+
+const operationLabel = (operation: Operation, compact = false): string => ({
+  ping: "PING",
+  traceroute: compact ? "TRACE" : "Traceroute",
+  bgp: "BGP",
+  bgp_community: compact ? "COMM" : "BGP Community",
+  bgp_aspath: compact ? "AS PATH" : "BGP AS Path",
+})[operation];
+
+const operationIcon = (operation: Operation) => operation === "ping"
+  ? <Radio size={17}/>
+  : operation === "traceroute"
+    ? <Route size={17}/>
+    : operation === "bgp_community"
+      ? <Hash size={17}/>
+      : operation === "bgp_aspath"
+        ? <Regex size={17}/>
+        : <ArrowLeftRight size={17}/>;
+
+const operationFromQueryLabel = (label: string): Operation | null => {
+  const normalized = label.toLowerCase().replaceAll("-", "_");
+  if (normalized.includes("ping")) return "ping";
+  if (normalized.includes("trace")) return "traceroute";
+  if (normalized.includes("communit")) return "bgp_community";
+  if (normalized.includes("as path") || normalized.includes("aspath") || normalized.includes("as_path")) return "bgp_aspath";
+  if (normalized.includes("bgp") || normalized.includes("route")) return "bgp";
+  return null;
+};
+
+const parseStructuredBgpOutput = (output: string): StructuredBgpOutput | null => {
+  try {
+    const data = JSON.parse(output);
+    if (!data || typeof data !== "object" || !Array.isArray(data.routes)) return null;
+    if (!data.routes.every((route: unknown) => route && typeof route === "object" && typeof (route as BgpRoute).prefix === "string")) return null;
+    return data as StructuredBgpOutput;
+  } catch {
+    return null;
+  }
+};
+
+const formatRouteAge = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}min`;
+  if (minutes) return `${minutes}min ${Math.floor(seconds % 60)}s`;
+  return `${Math.floor(seconds)}s`;
+};
+
+const RPKI_STATES: Record<number, { label: string; className: string }> = {
+  0: { label: "Inválido", className: "invalid" },
+  1: { label: "Válido", className: "valid" },
+  2: { label: "Não encontrado", className: "not-found" },
+  3: { label: "Desconhecido", className: "unknown" },
+};
 
 const parsePreCommands = (value: string): string[] =>
   value.split("\n").map(line => line.trim()).filter(Boolean);
@@ -108,8 +190,13 @@ const emptyHttpRequest = (): RequestConfig => ({
 });
 
 const initialForm = () => ({
-  name: "", protocol: "http" as Protocol, enabled: true,
+  name: "", protocol: "http" as Protocol, enabled: true, hyperglass_like: false,
   http: { timeout: 20, verify_tls: true, requests: {} as Partial<Record<Operation, RequestConfig>> },
+  hyperglass: {
+    base_url: "", location: "", timeout: 30, verify_tls: true,
+    api_format: "v2" as "v1" | "v2", vrf: "default", version: "", bootstrap_session: false,
+    query_types: { ...HYPERGLASS_DEFAULT_QUERY_TYPES } as Partial<Record<Operation, string>>,
+  },
   telnet: {
     host: "", port: 23, username: "", password: "",
     username_prompt: "(?i)(login|username)[: ]*$", password_prompt: "(?i)password[: ]*$",
@@ -314,18 +401,18 @@ function App() {
       {page === "query" ? <section className="query-page">
         <form className="query-panel" onSubmit={run}>
           <div className="operation-tabs">
-            {(["ping", "traceroute", "bgp"] as Operation[]).map(op => <button type="button" key={op} className={operation === op ? "selected" : ""} onClick={() => setOperation(op)}>
-              {op === "ping" ? <Radio size={17}/> : op === "traceroute" ? <Route size={17}/> : <ArrowLeftRight size={17}/>} {op === "traceroute" ? "Traceroute" : op.toUpperCase()}
+            {OPERATIONS.map(op => <button type="button" key={op} className={operation === op ? "selected" : ""} onClick={() => setOperation(op)}>
+              {operationIcon(op)} {operationLabel(op)}
             </button>)}
           </div>
           <div className="query-row">
-            <label><span>IP ou prefixo</span><div className="input-with-icon"><Globe2 size={19}/><input value={target} onChange={e => setTarget(e.target.value)} placeholder={operation === "bgp" ? "1.1.1.0/24 ou 2001:db8::/32" : "8.8.8.8"} required autoFocus/></div></label>
+            <label><span>{operation === "bgp_community" ? "Community BGP" : operation === "bgp_aspath" ? "Expressão regular de AS Path" : "IP ou prefixo"}</span><div className="input-with-icon"><Globe2 size={19}/><input value={target} onChange={e => setTarget(e.target.value)} placeholder={operation === "bgp" ? "1.1.1.0/24 ou 2001:db8::/32" : operation === "bgp_community" ? "7195:55000 ou large:7195:55:0" : operation === "bgp_aspath" ? "_13335$" : "8.8.8.8"} required autoFocus/></div></label>
             <div className="query-actions">{running && <button type="button" className="cancel-query" onClick={cancelQuery}><X size={18}/> Cancelar</button>}<button className="run-button" disabled={running || !supportedCount}>{running ? <Loader2 className="spin" size={19}/> : <Search size={19}/>} {running ? "Consultando..." : `Consultar ${supportedCount} LG${supportedCount === 1 ? "" : "s"}`}</button></div>
           </div>
           {recentTargets.length > 0 && <div className="target-history"><span><Clock3 size={13}/> Recentes</span><div>{recentTargets.map(value => <button type="button" className={target === value ? "selected" : ""} onClick={() => setTarget(value)} key={value}>{value}</button>)}</div><button type="button" className="clear-history" onClick={clearTargetHistory}>Limpar</button></div>}
           <div className="targets-head"><button type="button" className="link-button" disabled={!availableItems.length} onClick={toggleAll}>{allAvailableSelected ? "Limpar seleção" : "Selecionar todos"}</button><span>{supportedCount} de {availableItems.length} {availableItems.length === 1 ? "disponível" : "disponíveis"} selecionado{supportedCount === 1 ? "" : "s"}</span></div>
           <div className="provider-pills">
-            {loadingItems ? <span className="muted">Carregando fontes…</span> : items.length === 0 ? <button type="button" className="empty-inline" onClick={() => { setPage("providers"); setModal(true); }}><Plus size={16}/> Cadastre o primeiro Looking Glass</button> : availableItems.length === 0 ? <span className="muted">Nenhum LG habilitado oferece {operation === "traceroute" ? "traceroute" : operation.toUpperCase()}.</span> : availableItems.map(item => <button type="button" className={selected.has(item.id) ? "provider-pill selected" : "provider-pill"} onClick={() => setSelected(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; })} key={item.id}><span className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={14}/> : <Terminal size={14}/>}</span>{item.name}{selected.has(item.id) && <Check size={14}/>}</button>)}
+            {loadingItems ? <span className="muted">Carregando fontes…</span> : items.length === 0 ? <button type="button" className="empty-inline" onClick={() => { setPage("providers"); setModal(true); }}><Plus size={16}/> Cadastre o primeiro Looking Glass</button> : availableItems.length === 0 ? <span className="muted">Nenhum LG habilitado oferece {operationLabel(operation)}.</span> : availableItems.map(item => <button type="button" className={selected.has(item.id) ? "provider-pill selected" : "provider-pill"} onClick={() => setSelected(prev => { const next = new Set(prev); next.has(item.id) ? next.delete(item.id) : next.add(item.id); return next; })} key={item.id}><span className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={14}/> : <Terminal size={14}/>}</span>{item.name}{selected.has(item.id) && <Check size={14}/>}</button>)}
           </div>
         </form>
 
@@ -343,7 +430,7 @@ function App() {
         {loadingItems ? <div className="muted">Carregando…</div> : items.length === 0 ? <div className="empty-card"><Server size={31}/><h2>Nenhum Looking Glass cadastrado</h2><p>Adicione uma fonte HTTP ou Telnet para começar.</p><button className="primary" onClick={() => setModal(true)}><Plus size={18}/> Adicionar LG</button></div> : <div className="provider-list">{items.map(item => <article className="provider-row" key={item.id}>
           <div className={`big-protocol ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={22}/> : <Terminal size={22}/>}</div>
           <div className="provider-main"><div><h3>{item.name}</h3><span className={`badge ${item.enabled ? "online" : "off"}`}><i/>{item.enabled ? "Habilitado" : "Desabilitado"}</span></div><p>{describe(item)}</p></div>
-          <div className="operation-badges">{configuredOperations(item).map(op => <span key={op}>{op === "traceroute" ? "TRACE" : op.toUpperCase()}</span>)}</div>
+          <div className="operation-badges">{configuredOperations(item).map(op => <span key={op}>{operationLabel(op as Operation, true)}</span>)}</div>
           <button className="icon-button" title="Duplicar" onClick={() => duplicate(item)}><Copy size={17}/></button>
           <button className="icon-button" title="Editar" onClick={() => { setEditing(item); setModal(true); }}><Edit3 size={17}/></button>
           <button className="icon-button danger" title="Remover" onClick={() => remove(item)}><Trash2 size={17}/></button>
@@ -356,11 +443,47 @@ function App() {
 
 function ResultCard({ item }: { item: QueryResult }) {
   const [copied, setCopied] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const structuredOutput = item.status === "success" ? parseStructuredBgpOutput(item.output) : null;
   const copy = async () => { await navigator.clipboard.writeText(item.output); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   return <article className={`result-card ${item.status}`}>
-    <header><div className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={15}/> : <Terminal size={15}/>}</div><div><h3>{item.looking_glass_name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className={`result-status ${item.status}`}>{item.status === "success" ? "Concluído" : item.status === "unsupported" ? "Não suportado" : item.status === "cancelled" ? "Cancelado" : "Erro"}</span><span className="duration">{item.duration_ms} ms</span><button className="copy" onClick={copy}>{copied ? <Check size={16}/> : <Copy size={16}/>}</button></header>
-    <pre>{item.output}</pre>
+    <header><div className={`protocol-icon ${item.protocol}`}>{item.protocol === "http" ? <Globe2 size={15}/> : <Terminal size={15}/>}</div><div><h3>{item.looking_glass_name}</h3><span>{item.protocol.toUpperCase()}</span></div><span className={`result-status ${item.status}`}>{item.status === "success" ? "Concluído" : item.status === "unsupported" ? "Não suportado" : item.status === "cancelled" ? "Cancelado" : "Erro"}</span><span className="duration">{item.duration_ms} ms</span>{structuredOutput && <button className={`copy raw-toggle ${showRaw ? "selected" : ""}`} title={showRaw ? "Ver rotas formatadas" : "Ver JSON original"} aria-label={showRaw ? "Ver rotas formatadas" : "Ver JSON original"} onClick={() => setShowRaw(value => !value)}><Braces size={16}/></button>}<button className="copy" title="Copiar resultado completo" aria-label="Copiar resultado completo" onClick={copy}>{copied ? <Check size={16}/> : <Copy size={16}/>}</button></header>
+    {structuredOutput && !showRaw ? <BgpRoutesOutput data={structuredOutput}/> : <pre>{item.output}</pre>}
   </article>;
+}
+
+function BgpRoutesOutput({ data }: { data: StructuredBgpOutput }) {
+  return <div className="bgp-output">
+    <div className="bgp-overview">
+      <div><span>VRF</span><strong>{data.vrf || "default"}</strong></div>
+      <div><span>Rotas</span><strong>{data.count ?? data.routes.length}</strong></div>
+      <div><span>Preferência de weight</span><strong>{data.winning_weight === "low" ? "Menor" : data.winning_weight === "high" ? "Maior" : data.winning_weight || "—"}</strong></div>
+    </div>
+    <div className="bgp-route-list">{data.routes.map((route, index) => {
+      const rpki = RPKI_STATES[route.rpki_state] || { label: `Estado ${route.rpki_state}`, className: "unknown" };
+      return <section className={`bgp-route ${route.active ? "active" : "alternate"}`} key={`${route.prefix}-${route.next_hop}-${index}`}>
+        <div className="route-heading">
+          <span className={`route-choice ${route.active ? "active" : "alternate"}`}>{route.active ? "Melhor caminho" : "Alternativo"}</span>
+          <strong>{route.prefix}</strong>
+          <span className={`rpki-state ${rpki.className}`} title={`Estado RPKI ${route.rpki_state}`}>RPKI {rpki.label}</span>
+        </div>
+        <div className="route-path">
+          <div><span>Next-hop</span><strong>{route.next_hop || "—"}</strong></div>
+          <div><span>AS Path</span><strong>{route.as_path?.length ? route.as_path.join(" → ") : "Local"}</strong></div>
+        </div>
+        <div className="route-metrics">
+          <div><span>Local-pref</span><strong>{route.local_preference ?? "—"}</strong></div>
+          <div><span>MED</span><strong>{route.med ?? "—"}</strong></div>
+          <div><span>Weight</span><strong>{route.weight ?? "—"}</strong></div>
+          <div><span>Idade</span><strong title={`${route.age} segundos`}>{formatRouteAge(route.age)}</strong></div>
+          <div><span>AS de origem</span><strong>{route.source_as || "—"}</strong></div>
+          <div><span>Router ID origem</span><strong>{route.source_rid || "—"}</strong></div>
+          <div><span>Router ID peer</span><strong>{route.peer_rid || "—"}</strong></div>
+        </div>
+        <div className="route-communities"><span>Communities</span><div>{route.communities?.length ? route.communities.map(community => <code key={community}>{community}</code>) : <i>Nenhuma</i>}</div></div>
+      </section>;
+    })}</div>
+  </div>;
 }
 
 function LiveResultCard({ item, output }: { item: LookingGlass; output: string }) {
@@ -375,15 +498,38 @@ function LiveResultCard({ item, output }: { item: LookingGlass; output: string }
   </article>;
 }
 
-const configuredOperations = (item: LookingGlass): string[] => Object.keys(item.protocol === "http" ? item.config.requests || {} : item.config.commands || {});
-const describe = (item: LookingGlass) => item.protocol === "http" ? `${configuredOperations(item).length} endpoint(s) HTTP configurado(s)` : `${item.config.host}:${item.config.port || 23}`;
+const configuredOperations = (item: LookingGlass): string[] => Object.keys(
+  item.protocol === "telnet"
+    ? item.config.commands || {}
+    : item.config.hyperglass_like
+      ? item.config.query_types || {}
+      : item.config.requests || {},
+);
+const describe = (item: LookingGlass) => item.protocol === "telnet"
+  ? `${item.config.host}:${item.config.port || 23}`
+  : item.config.hyperglass_like
+    ? `Hyperglass · ${item.config.location} · ${configuredOperations(item).length} operação(ões)`
+    : `${configuredOperations(item).length} endpoint(s) HTTP configurado(s)`;
 
 function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState<any>(() => {
     const base = initialForm();
     if (!item) return base;
-    return item.protocol === "http"
-      ? { ...base, name: item.name, protocol: item.protocol, enabled: item.enabled, http: item.config }
+    return item.protocol === "http" && item.config.hyperglass_like
+      ? {
+          ...base,
+          name: item.name,
+          protocol: item.protocol,
+          enabled: item.enabled,
+          hyperglass_like: true,
+          hyperglass: {
+            ...base.hyperglass,
+            ...item.config,
+            query_types: item.config.query_types || {},
+          },
+        }
+      : item.protocol === "http"
+      ? { ...base, name: item.name, protocol: item.protocol, enabled: item.enabled, http: { ...base.http, ...item.config } }
       : {
           ...base,
           name: item.name,
@@ -399,7 +545,10 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
   });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
-  const ops: Operation[] = ["ping", "traceroute", "bgp"];
+  const [discovering, setDiscovering] = useState(false);
+  const [hyperglassDevices, setHyperglassDevices] = useState<HyperglassDevice[]>([]);
+  const [hyperglassQueries, setHyperglassQueries] = useState<string[]>([]);
+  const ops = OPERATIONS;
 
   const toggleHttpOp = (op: Operation) => setForm((prev: any) => ({ ...prev, http: { ...prev.http, requests: { ...prev.http.requests, [op]: prev.http.requests[op] ? undefined : emptyHttpRequest() } } }));
   const toggleTelnetOp = (op: Operation) => setForm((prev: any) => {
@@ -423,13 +572,88 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
       },
     },
   }));
+  const toggleHyperglassOp = (op: Operation) => setForm((prev: any) => ({
+    ...prev,
+    hyperglass: {
+      ...prev.hyperglass,
+      query_types: {
+        ...prev.hyperglass.query_types,
+        [op]: prev.hyperglass.query_types[op] !== undefined ? undefined : (HYPERGLASS_DEFAULT_QUERY_TYPES[op] || ""),
+      },
+    },
+  }));
+  const discoverHyperglass = async () => {
+    setDiscovering(true);
+    setFormError("");
+    try {
+      const discovery = await api<HyperglassDiscovery>("/api/hyperglass/discover", {
+        method: "POST",
+        body: JSON.stringify({
+          base_url: form.hyperglass.base_url,
+          timeout: form.hyperglass.timeout,
+          verify_tls: form.hyperglass.verify_tls,
+        }),
+      });
+      setHyperglassDevices(discovery.devices);
+      setHyperglassQueries(discovery.queries);
+      setForm((prev: any) => {
+        const currentLocationExists = discovery.devices.some(device => device.id === prev.hyperglass.location);
+        const location = currentLocationExists ? prev.hyperglass.location : discovery.devices[0].id;
+        const selectedDevice = discovery.devices.find(device => device.id === location) || discovery.devices[0];
+        const recognized: Partial<Record<Operation, string>> = {};
+        for (const label of discovery.queries) {
+          const detectedOperation = operationFromQueryLabel(label);
+          if (detectedOperation) {
+            recognized[detectedOperation] = prev.hyperglass.query_types[detectedOperation]
+              || HYPERGLASS_DEFAULT_QUERY_TYPES[detectedOperation]
+              || "";
+          }
+        }
+        return {
+          ...prev,
+          name: prev.name || discovery.devices[0].name,
+          hyperglass: {
+            ...prev.hyperglass,
+            base_url: discovery.base_url,
+            location,
+            api_format: discovery.api_format,
+            version: discovery.version,
+            vrf: selectedDevice.vrf || "default",
+            bootstrap_session: discovery.bootstrap_session || false,
+            timeout: discovery.request_timeout || prev.hyperglass.timeout,
+            query_types: selectedDevice.query_types && Object.keys(selectedDevice.query_types).length
+              ? { ...selectedDevice.query_types }
+              : Object.keys(recognized).length ? recognized : prev.hyperglass.query_types,
+          },
+        };
+      });
+    } catch (e) {
+      setFormError((e as Error).message);
+    } finally {
+      setDiscovering(false);
+    }
+  };
   const parseJson = (value: string, label: string) => { try { return value.trim() ? JSON.parse(value) : {}; } catch { throw new Error(`${label} deve ser um JSON válido`); } };
 
   const save = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setFormError("");
     try {
       let config: any;
-      if (form.protocol === "http") {
+      if (form.protocol === "http" && form.hyperglass_like) {
+        const queryTypes: Record<string, string> = {};
+        for (const op of ops) if (form.hyperglass.query_types[op] !== undefined) queryTypes[op] = form.hyperglass.query_types[op]!;
+        config = {
+          hyperglass_like: true,
+          base_url: form.hyperglass.base_url,
+          location: form.hyperglass.location,
+          api_format: form.hyperglass.api_format,
+          vrf: form.hyperglass.vrf,
+          bootstrap_session: form.hyperglass.bootstrap_session,
+          timeout: form.hyperglass.timeout,
+          verify_tls: form.hyperglass.verify_tls,
+          query_types: queryTypes,
+        };
+      } else if (form.protocol === "http") {
         const requests: Record<string, any> = {};
         for (const op of ops) {
           const req = form.http.requests[op]; if (!req) continue;
@@ -475,6 +699,29 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
       <label className="switch-row"><button type="button" role="switch" aria-checked={form.enabled} className={form.enabled ? "switch on" : "switch"} onClick={() => setForm({ ...form, enabled: !form.enabled })}><i/></button><span>Habilitar nas consultas</span></label>
       <div className="divider"/>
       {form.protocol === "http" ? <>
+        <label className="hyperglass-option"><input type="checkbox" checked={form.hyperglass_like} onChange={e => setForm({ ...form, hyperglass_like: e.target.checked })}/><span><strong>Hyperglass-like</strong><small>Detectar Hyperglass 1.x/2.x, dispositivos, operações e o formato da API.</small></span></label>
+        {form.hyperglass_like ? <>
+          <div className="hyperglass-discovery-row"><label><span>URL base do Hyperglass</span><input required value={form.hyperglass.base_url} onChange={e => setForm({ ...form, hyperglass: { ...form.hyperglass, base_url: e.target.value } })} placeholder="http://lg.exemplo.net.br"/></label><button type="button" className="secondary discover-button" disabled={discovering || !form.hyperglass.base_url} onClick={discoverHyperglass}>{discovering ? <Loader2 className="spin" size={16}/> : <RefreshCw size={16}/>} Detectar API</button></div>
+          <div className="form-grid three">
+            <label><span>Dispositivo / queryLocation</span>{hyperglassDevices.length ? <div className="select-wrap"><select required value={form.hyperglass.location} onChange={e => {
+              const location = e.target.value;
+              const device = hyperglassDevices.find(item => item.id === location);
+              setForm((prev: any) => ({ ...prev, hyperglass: {
+                ...prev.hyperglass,
+                location,
+                vrf: device?.vrf || "default",
+                query_types: device?.query_types && Object.keys(device.query_types).length
+                  ? { ...device.query_types }
+                  : prev.hyperglass.query_types,
+              } }));
+            }}>{hyperglassDevices.map(device => <option value={device.id} key={device.id}>{device.name} ({device.id}){device.group ? ` · ${device.group}` : ""}</option>)}</select><ChevronDown size={16}/></div> : <input required value={form.hyperglass.location} onChange={e => setForm({ ...form, hyperglass: { ...form.hyperglass, location: e.target.value } })} placeholder="ssaba_-_rta-01"/>}</label>
+            <label><span>Timeout (segundos)</span><input type="number" min="2" max="300" value={form.hyperglass.timeout} onChange={e => setForm({ ...form, hyperglass: { ...form.hyperglass, timeout: +e.target.value } })}/></label>
+            <label className="check-row"><input type="checkbox" checked={form.hyperglass.verify_tls} onChange={e => setForm({ ...form, hyperglass: { ...form.hyperglass, verify_tls: e.target.checked } })}/> Validar TLS</label>
+          </div>
+          {hyperglassQueries.length > 0 && <div className="hyperglass-detected"><span>Hyperglass {form.hyperglass.version || "detectado"} · API {form.hyperglass.api_format.toUpperCase()}</span>{hyperglassQueries.map(query => <i key={query}>{query}</i>)}</div>}
+          <div className="hyperglass-help"><strong>IDs internos da consulta</strong><span>O MultiLG tenta detectar os <code>queryType</code> específicos de cada dispositivo. Se o LG não publicar esses dados, os padrões Juniper são usados como base e continuam editáveis.</span></div>
+          <OperationEditor ops={ops} configured={form.hyperglass.query_types} onToggle={toggleHyperglassOp}>{op => <div className="operation-fields"><label><span>queryType da API</span><input required value={form.hyperglass.query_types[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, hyperglass: { ...prev.hyperglass, query_types: { ...prev.hyperglass.query_types, [op]: e.target.value } } }))} placeholder={HYPERGLASS_DEFAULT_QUERY_TYPES[op]}/></label></div>}</OperationEditor>
+        </> : <>
         <div className="form-grid two"><label><span>Timeout (segundos)</span><input type="number" min="2" max="120" value={form.http.timeout} onChange={e => setForm({ ...form, http: { ...form.http, timeout: +e.target.value } })}/></label><label className="check-row"><input type="checkbox" checked={form.http.verify_tls} onChange={e => setForm({ ...form, http: { ...form.http, verify_tls: e.target.checked } })}/> Validar certificado TLS</label></div>
         <OperationEditor ops={ops} configured={form.http.requests} onToggle={toggleHttpOp}>{op => {
           const req = form.http.requests[op]!;
@@ -494,14 +741,15 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
             <label><span>Regex de extração (opcional, grupo 1)</span><input value={req.output_regex || ""} onChange={e => update({ output_regex: e.target.value })} placeholder={'<pre[^>]*>([\\s\\S]*?)</pre>'}/></label>
           </div>;
         }}</OperationEditor>
+        </>}
       </> : <>
         <div className="form-grid three"><label><span>Host</span><input required value={form.telnet.host} onChange={e => setForm({ ...form, telnet: { ...form.telnet, host: e.target.value } })} placeholder="lg.exemplo.net"/></label><label><span>Porta</span><input type="number" min="1" max="65535" value={form.telnet.port} onChange={e => setForm({ ...form, telnet: { ...form.telnet, port: +e.target.value } })}/></label><label><span>Timeout</span><input type="number" min="2" max="120" value={form.telnet.timeout} onChange={e => setForm({ ...form, telnet: { ...form.telnet, timeout: +e.target.value } })}/></label></div>
         <div className="form-grid two"><label><span>Usuário (opcional)</span><input value={form.telnet.username} onChange={e => setForm({ ...form, telnet: { ...form.telnet, username: e.target.value } })}/></label><label><span>Senha {form.telnet.has_password ? "(deixe vazio para manter)" : "(opcional)"}</span><input type="password" value={form.telnet.password} onChange={e => setForm({ ...form, telnet: { ...form.telnet, password: e.target.value } })}/></label><label><span>Regex do prompt de usuário</span><input value={form.telnet.username_prompt} onChange={e => setForm({ ...form, telnet: { ...form.telnet, username_prompt: e.target.value } })}/></label><label><span>Regex do prompt de senha</span><input value={form.telnet.password_prompt} onChange={e => setForm({ ...form, telnet: { ...form.telnet, password_prompt: e.target.value } })}/></label><label><span>Regex do prompt final</span><input value={form.telnet.prompt_regex} onChange={e => setForm({ ...form, telnet: { ...form.telnet, prompt_regex: e.target.value } })}/></label><label><span>Outros pré-comandos (um por linha)</span><textarea value={form.telnet.pre_commands_text || ""} onChange={e => setForm({ ...form, telnet: { ...form.telnet, pre_commands_text: e.target.value } })} placeholder="terminal width 0"/></label></div>
         <label className="pagination-option"><span>Desativar paginação</span><div className="select-wrap"><select value={form.telnet.paging_command || ""} onChange={e => setForm({ ...form, telnet: { ...form.telnet, paging_command: e.target.value } })}>{PAGING_PRESETS.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}</select><ChevronDown size={16}/></div><small>Escolha conforme a CLI quando a saída parar em <code>--More--</code> ou <code>---(more)---</code>.</small></label>
         <OperationEditor ops={ops} configured={form.telnet.commands} onToggle={toggleTelnetOp}>{op => <div className="operation-fields">
-          <label><span>Comando IPv4 / padrão — use <code>{'{target}'}</code></span><input required value={form.telnet.commands[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, telnet: { ...prev.telnet, commands: { ...prev.telnet.commands, [op]: e.target.value } } }))} placeholder={op === "ping" ? "ping {target} count 5" : op === "traceroute" ? "traceroute {target}" : "show bgp ipv4 unicast {target}"}/></label>
-          <button type="button" className={`v6-command-toggle ${form.telnet.commands_v6[op] !== undefined ? "enabled" : ""}`} onClick={() => toggleTelnetV6(op)}>{form.telnet.commands_v6[op] !== undefined ? <Check size={15}/> : <Plus size={15}/>} {form.telnet.commands_v6[op] !== undefined ? "Comando IPv6 habilitado" : "Usar comando IPv6 diferente"}</button>
-          {form.telnet.commands_v6[op] !== undefined && <label><span>Comando IPv6 — use <code>{'{target}'}</code></span><input required value={form.telnet.commands_v6[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, telnet: { ...prev.telnet, commands_v6: { ...prev.telnet.commands_v6, [op]: e.target.value } } }))} placeholder={op === "ping" ? "ping ipv6 {target} count 5" : op === "traceroute" ? "traceroute ipv6 {target}" : "show bgp ipv6 unicast {target}"}/></label>}
+          <label><span>Comando padrão — use <code>{'{target}'}</code></span><input required value={form.telnet.commands[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, telnet: { ...prev.telnet, commands: { ...prev.telnet.commands, [op]: e.target.value } } }))} placeholder={op === "ping" ? "ping {target} count 5" : op === "traceroute" ? "traceroute {target}" : op === "bgp_community" ? "show bgp community {target}" : op === "bgp_aspath" ? "show bgp regexp {target}" : "show bgp ipv4 unicast {target}"}/></label>
+          {(op === "ping" || op === "traceroute" || op === "bgp") && <button type="button" className={`v6-command-toggle ${form.telnet.commands_v6[op] !== undefined ? "enabled" : ""}`} onClick={() => toggleTelnetV6(op)}>{form.telnet.commands_v6[op] !== undefined ? <Check size={15}/> : <Plus size={15}/>} {form.telnet.commands_v6[op] !== undefined ? "Comando IPv6 habilitado" : "Usar comando IPv6 diferente"}</button>}
+          {(op === "ping" || op === "traceroute" || op === "bgp") && form.telnet.commands_v6[op] !== undefined && <label><span>Comando IPv6 — use <code>{'{target}'}</code></span><input required value={form.telnet.commands_v6[op] || ""} onChange={e => setForm((prev: any) => ({ ...prev, telnet: { ...prev.telnet, commands_v6: { ...prev.telnet.commands_v6, [op]: e.target.value } } }))} placeholder={op === "ping" ? "ping ipv6 {target} count 5" : op === "traceroute" ? "traceroute ipv6 {target}" : "show bgp ipv6 unicast {target}"}/></label>}
         </div>}</OperationEditor>
       </>}
       <footer><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving && <Loader2 className="spin" size={17}/>} Salvar Looking Glass</button></footer>
@@ -510,7 +758,7 @@ function ProviderModal({ item, onClose, onSaved }: { item: LookingGlass | null; 
 }
 
 function OperationEditor({ ops, configured, onToggle, children }: { ops: Operation[]; configured: Partial<Record<Operation, any>>; onToggle: (op: Operation) => void; children: (op: Operation) => React.ReactNode }) {
-  return <div className="operations-editor"><div className="section-label">Operações disponíveis</div>{ops.map(op => <div className={`op-editor ${configured[op] !== undefined ? "open" : ""}`} key={op}><button type="button" className="op-toggle" onClick={() => onToggle(op)}><span>{op === "ping" ? <Radio size={17}/> : op === "traceroute" ? <Route size={17}/> : <ArrowLeftRight size={17}/>} {op === "traceroute" ? "Traceroute" : op.toUpperCase()}</span><span className={configured[op] !== undefined ? "configured" : "not-configured"}>{configured[op] !== undefined ? "Configurado" : "Não configurado"}</span></button>{configured[op] !== undefined && <div className="op-content">{children(op)}</div>}</div>)}</div>;
+  return <div className="operations-editor"><div className="section-label">Operações disponíveis</div>{ops.map(op => <div className={`op-editor ${configured[op] !== undefined ? "open" : ""}`} key={op}><button type="button" className="op-toggle" onClick={() => onToggle(op)}><span>{operationIcon(op)} {operationLabel(op)}</span><span className={configured[op] !== undefined ? "configured" : "not-configured"}>{configured[op] !== undefined ? "Configurado" : "Não configurado"}</span></button>{configured[op] !== undefined && <div className="op-content">{children(op)}</div>}</div>)}</div>;
 }
 
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App/></React.StrictMode>);

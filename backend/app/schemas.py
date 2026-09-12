@@ -8,6 +8,8 @@ class Operation(str, Enum):
     ping = "ping"
     traceroute = "traceroute"
     bgp = "bgp"
+    bgp_community = "bgp_community"
+    bgp_aspath = "bgp_aspath"
 
 
 class Protocol(str, Enum):
@@ -46,6 +48,64 @@ class HttpConfig(BaseModel):
         return self
 
 
+class HyperglassConfig(BaseModel):
+    hyperglass_like: Literal[True] = True
+    base_url: str
+    location: str = Field(min_length=1)
+    query_types: dict[Operation, str]
+    api_format: Literal["v1", "v2"] = "v2"
+    vrf: str = "default"
+    bootstrap_session: bool = False
+    timeout: int = Field(default=30, ge=2, le=300)
+    verify_tls: bool = True
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if normalized.endswith("/api"):
+            normalized = normalized[:-4]
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("A URL base deve começar com http:// ou https://")
+        return normalized
+
+    @field_validator("location")
+    @classmethod
+    def normalize_location(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("vrf")
+    @classmethod
+    def normalize_vrf(cls, value: str) -> str:
+        return value.strip() or "default"
+
+    @field_validator("query_types")
+    @classmethod
+    def validate_query_types(cls, value: dict[Operation, str]) -> dict[Operation, str]:
+        cleaned = {operation: query_type.strip() for operation, query_type in value.items()}
+        if not cleaned:
+            raise ValueError("Configure ao menos uma operação Hyperglass")
+        if any(not query_type for query_type in cleaned.values()):
+            raise ValueError("O queryType das operações Hyperglass não pode ficar vazio")
+        return cleaned
+
+
+class HyperglassDiscoveryInput(BaseModel):
+    base_url: str
+    timeout: int = Field(default=15, ge=2, le=300)
+    verify_tls: bool = True
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if normalized.endswith("/api"):
+            normalized = normalized[:-4]
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("A URL base deve começar com http:// ou https://")
+        return normalized
+
+
 class TelnetConfig(BaseModel):
     host: str = Field(min_length=1)
     port: int = Field(default=23, ge=1, le=65535)
@@ -76,14 +136,17 @@ class LookingGlassInput(BaseModel):
     @model_validator(mode="after")
     def validate_config(self):
         if self.protocol == Protocol.http:
-            HttpConfig.model_validate(self.config)
+            if self.config.get("hyperglass_like"):
+                HyperglassConfig.model_validate(self.config)
+            else:
+                HttpConfig.model_validate(self.config)
         else:
             TelnetConfig.model_validate(self.config)
         return self
 
 
 class QueryInput(BaseModel):
-    target: str = Field(min_length=2, max_length=64)
+    target: str = Field(min_length=1, max_length=256)
     operation: Operation
     looking_glass_ids: list[str] | None = None
 
