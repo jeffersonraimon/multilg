@@ -408,12 +408,15 @@ function App() {
       } catch {
         throw new Error("O arquivo selecionado não contém um JSON válido.");
       }
-      const result = await api<{ imported: number }>("/api/looking-glasses/import", {
+      const result = await api<{ imported: number; created?: number; updated?: number }>("/api/looking-glasses/import", {
         method: "POST",
         body: JSON.stringify(json),
       });
       await loadItems();
-      alert(`${result.imported} Looking Glass(es) importado(s) com sucesso!`);
+      const msg = result.created !== undefined && result.updated !== undefined
+        ? `Importação concluída! ${result.created} novo(s), ${result.updated} atualizado(s).`
+        : `${result.imported} Looking Glass(es) importado(s) com sucesso!`;
+      alert(msg);
     } catch (e) { setError((e as Error).message); }
     finally {
       if (event.target) event.target.value = "";

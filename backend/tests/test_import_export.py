@@ -47,7 +47,7 @@ def test_export_import_flow(client):
     assert data[0]["name"] == "LG Teste Export"
     assert data[0]["config"]["password"] == "secretpassword"
 
-    # 3. Import LGs in batch
+    # 3. Import LGs in batch (1 matching existing name, 1 new)
     import_payload = [
         data[0],
         {
@@ -65,11 +65,13 @@ def test_export_import_flow(client):
     assert import_res.status_code == 201
     import_data = import_res.json()
     assert import_data["imported"] == 2
+    assert import_data["created"] == 1
+    assert import_data["updated"] == 1
 
-    # 4. Verify list count
+    # 4. Verify list count (should be 2 instead of duplicated 3)
     list_res = client.get("/api/looking-glasses")
     assert list_res.status_code == 200
-    assert len(list_res.json()) == 3
+    assert len(list_res.json()) == 2
 
 def test_import_validation_error(client):
     invalid_payload = [

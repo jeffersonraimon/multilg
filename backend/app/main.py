@@ -91,12 +91,34 @@ async def import_looking_glasses(request: Request):
                 422, f"Erro de validação no LG #{idx} ('{lg_name}'): {exc}"
             ) from exc
 
-    created = []
-    for item in validated_items:
-        result = database().create(item.model_dump(mode="json"))
-        created.append(result)
+    created_count = 0
+    updated_count = 0
+    result_items = []
 
-    return {"imported": len(created), "items": created}
+    for raw_item, validated_item in zip(raw_items, validated_items):
+        item_data = validated_item.model_dump(mode="json")
+        existing = None
+        if isinstance(raw_item, dict) and raw_item.get("id"):
+            existing = database().get(str(raw_item["id"]))
+        if not existing:
+            existing = database().get_by_name(validated_item.name)
+
+        if existing:
+            updated = database().update(existing["id"], item_data)
+            if updated:
+                result_items.append(updated)
+                updated_count += 1
+        else:
+            created = database().create(item_data)
+            result_items.append(created)
+            created_count += 1
+
+    return {
+        "imported": len(result_items),
+        "created": created_count,
+        "updated": updated_count,
+        "items": result_items,
+    }
 
 
 @app.post("/api/looking-glasses", status_code=201)

@@ -76,6 +76,13 @@ class Database:
             ).fetchone()
         return self._decode(row, reveal) if row else None
 
+    def get_by_name(self, name: str, reveal: bool = False) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM looking_glasses WHERE LOWER(name) = LOWER(?)", (name.strip(),)
+            ).fetchone()
+        return self._decode(row, reveal) if row else None
+
     def create(self, payload: dict) -> dict:
         item_id = str(uuid4())
         now = utc_now()
